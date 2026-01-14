@@ -53,8 +53,8 @@ agent-skills-tool -i https://github.com/owner/repo/tree/main/skills/my-skill
 ## SKILL.md 要求
 
 - 必须包含 YAML frontmatter
-- 必填字段：`name`、`description`、`version`
-- `version` 必须为 semver（例如 `1.2.3`）
+- 必填字段：`name`、`description`、`metadata.version`
+- `metadata.version` 必须为 semver（例如 `1.2.3`）
 
 示例：
 
@@ -62,7 +62,8 @@ agent-skills-tool -i https://github.com/owner/repo/tree/main/skills/my-skill
 ---
 name: code-reviewer
 description: Reviews code using team standards.
-version: 1.0.0
+metadata:
+  version: 1.0.0
 ---
 
 # Code Reviewer

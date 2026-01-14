@@ -1,6 +1,6 @@
 {
   "name": "agent-skills-tool",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Install Agent Skills into Codex, Claude Code, and Gemini project or user scopes.",
   "type": "module",
   "bin": {
