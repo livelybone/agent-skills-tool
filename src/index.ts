@@ -5,7 +5,6 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { Command } from "commander";
 import matter from "gray-matter";
-import semver from "semver";
 import inquirer from "inquirer";
 
 type InstallOptions = {
@@ -215,11 +214,6 @@ function validateFrontmatter(
 
   const name = String(frontmatter.name || "").trim();
   const description = String(frontmatter.description || "").trim();
-  const metadata =
-    frontmatter.metadata && typeof frontmatter.metadata === "object"
-      ? (frontmatter.metadata as Record<string, unknown>)
-      : null;
-  const version = String(metadata?.version || "").trim();
 
   if (!name) {
     throw new Error(`Missing required frontmatter field "name" in ${skillFile}`);
@@ -229,15 +223,6 @@ function validateFrontmatter(
     throw new Error(`Missing required frontmatter field "description" in ${skillFile}`);
   }
 
-  if (!version) {
-    throw new Error(
-      `Missing required frontmatter field "metadata.version" in ${skillFile}`
-    );
-  }
-
-  if (!semver.valid(version)) {
-    throw new Error(`Invalid semver "metadata.version" in ${skillFile}: ${version}`);
-  }
 }
 
 function getInstallTargets(destinationProjectPath?: string): InstallTarget[] {
