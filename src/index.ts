@@ -38,6 +38,7 @@ program
   .name("agent-skills-tool")
   .description("Install Agent Skills into Codex, Claude Code, and Gemini scopes")
   .option("-i, --install <skillPath>", "Path to a skill directory (or SKILL.md)")
+  .option("-r, --remove <skillName>", "Remove a skill by name")
   .option("--subdir <path>", "Skill directory within a repository")
   .option("--ref <ref>", "Git ref when installing from a repository")
   .option("--force", "Overwrite existing skill directories")
@@ -45,8 +46,23 @@ program
   .argument("[destinationProjectPath]", "Project root path for project-scoped install")
   .action(async (destinationProjectPath: string | undefined, options) => {
     try {
+      const installPath = options.install as string | undefined;
+      const removeName = options.remove as string | undefined;
+
+      if (installPath && removeName) {
+        throw new Error("--install and --remove cannot be used together");
+      }
+
+      if (removeName) {
+        await runRemove({
+          skillName: removeName,
+          destinationProjectPath
+        });
+        return;
+      }
+
       await runInstall({
-        skillPath: options.install,
+        skillPath: installPath,
         subdir: options.subdir,
         ref: options.ref,
         destinationProjectPath,
@@ -143,6 +159,32 @@ async function runInstall({
     if (cleanup) {
       await cleanup();
     }
+  }
+}
+
+async function runRemove({
+  skillName,
+  destinationProjectPath
+}: {
+  skillName: string;
+  destinationProjectPath?: string;
+}): Promise<void> {
+  const trimmedName = skillName.trim();
+  if (!trimmedName) {
+    throw new Error("Skill name is required for removal");
+  }
+
+  const targets = getInstallTargets(destinationProjectPath);
+
+  for (const target of targets) {
+    const targetSkillDir = path.join(target.baseDir, trimmedName);
+    const exists = await pathExists(targetSkillDir);
+    if (!exists) {
+      console.log(`Not found (${target.label}) -> ${targetSkillDir}`);
+      continue;
+    }
+    await fs.rm(targetSkillDir, { recursive: true, force: true });
+    console.log(`Removed (${target.label}) -> ${targetSkillDir}`);
   }
 }
 
