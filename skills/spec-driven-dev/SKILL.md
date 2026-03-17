@@ -1,0 +1,823 @@
+---
+name: spec-driven-dev
+description: 强制执行规范驱动的 AI 开发工作流。Epic 级需求先 Plan（模块拆解 + 依赖图 + 契约定义），再对每个模块独立走 Spec → Scenarios → Tests → Implementation → CI 流程。控制行为、减少回归，确保 AI 生成的代码与业务规则一致。使用子 agent 提供独立的 Spec 和 Scenario 审查。触发词：spec、plan、epic、模块拆解、开发规范、需求拆分。
+metadata:
+  version: 1.3
+  tags:
+    - ai-workflow
+    - spec-driven
+    - epic-planning
+    - testing
+    - development-process
+---
+
+# 规范驱动开发 Skill
+
+## 目的
+
+本 skill 强制执行 AI 辅助软件开发的结构化工作流，覆盖两个层次：
+
+**Epic 层（需求超出单个模块时必须先执行）**：
+
+Plan（模块拆解 + 依赖图 + 契约定义）
+→ Human Plan Review（人确认边界与依赖）
+→ 对每个模块独立启动下方的 Spec 层流程
+
+**Spec 层（每个模块独立执行）**：
+
+Spec（规范）
+→ AI-Assisted Spec Review（AI 辅助 Spec 审查，可选）
+→ Human Spec Review（人工 Spec 审查）
+→ Scenario Generation（场景生成）
+→ AI-Assisted Scenario Review（AI 辅助场景审查，可选）
+→ Human Scenario Review（人工场景审查）
+→ Test Implementation（测试实现）
+→ Feature Implementation（功能实现）
+→ CI Verification（CI 验证）
+
+工作流确保：
+
+- 行为在实现之前被定义
+- Spec 的质量在源头得到保证（完整性、一致性、无歧义）
+- AI 提供独立的审查视角（使用子 agent）
+- 关键场景由人工审查
+- 测试保护系统行为
+- AI 执行大部分实现工作
+- CI 强制执行正确性
+
+---
+
+# 核心原则
+
+- Spec 是唯一的真理源
+- 人类定义行为；AI 执行
+- 测试场景是人类可读的
+- 测试代码由 AI 生成
+- 实现必须满足测试
+- CI 是最终强制层
+- 优先行为验证而非实现测试
+- 优先少量高价值测试而非大量脆弱测试套件
+
+---
+
+# 人机分工
+
+## 人的职责
+
+- 定义/审查行为（Spec + Scenario）
+- **不管代码**
+
+具体：
+
+- 编写或审查 Spec
+- 审查 AI 生成的 Scenario
+- 验证业务覆盖度
+- 批准最终行为
+
+## AI 的职责
+
+- 执行（生成 Scenario、写 Test、写 Feature）
+
+具体：
+
+- 从 Spec 生成 Scenario
+- 编写自动化测试
+- 实现功能
+- 建议遗漏的边界案例
+- 暴露 Spec 的歧义
+
+## 测试的职责
+
+- 保证 AI 生成的代码符合人审查的场景
+
+## 质量保证链条
+
+```
+Spec (人定义/审查)
+→ Scenario (AI 生成 + 人审查)
+→ Test (AI 实现，验证场景)
+→ Feature (AI 实现，满足测试)
+→ CI (自动验证)
+```
+
+每一层都有验证，**人只需要在关键决策点（行为定义）介入**。
+
+---
+
+# 复杂度分级标准
+
+根据任务复杂度，调整**谁来主导 Spec 编写**和 **Scenario Review 的深度**。
+
+流程本身不变，变化的是执行者和审查深度。
+
+## Trivial（琐碎）
+
+- **特征**：单一函数修改、typo、格式调整
+- **Spec 生成**：人口头描述 → AI 生成 Spec
+- **AI 辅助审查 Spec**：跳过
+- **人工 Spec 审查**：快速确认
+- **Scenario 生成**：AI 生成
+- **AI 辅助审查 Scenario**：跳过
+- **人工 Scenario 审查**：快速扫读，重点看边界案例
+- **示例**：「把这个函数的参数改成可选」
+
+## Simple（简单）
+
+- **特征**：单一模块新增/修改，逻辑清晰
+- **Spec 生成**：人简要描述 → AI 生成 Spec
+- **AI 辅助审查 Spec**：可选
+- **人工 Spec 审查**：审查确认
+- **Scenario 生成**：AI 生成
+- **AI 辅助审查 Scenario**：可选（人可以选择跳过以提高效率）
+- **人工 Scenario 审查**：仔细审查主流程 + 关键边界
+- **示例**：「订单列表增加按状态筛选」
+
+## Medium（中等）
+
+- **特征**：多模块协调，有状态转换
+- **Spec 生成**：人编写初稿 → AI 补充边界案例
+- **AI 辅助审查 Spec**：推荐（使用子 agent，检查完整性、一致性、风险）
+- **人工 Spec 审查**：基于 AI 审查报告，审查修订
+- **Scenario 生成**：AI 生成
+- **AI 辅助审查 Scenario**：推荐（使用子 agent）
+- **人工 Scenario 审查**：基于 AI 审查报告，仔细审查所有场景，特别是状态转换
+- **示例**：「实现订单退款流程」
+
+## Complex（复杂）
+
+- **特征**：架构级变更，涉及外部系统
+- **Spec 生成**：人编写初稿 → AI 补充边界案例
+- **AI 辅助审查 Spec**：强烈推荐（使用子 agent，可能需要多轮，重点检查风险）
+- **人工 Spec 审查**：基于 AI 审查报告，发现遗漏并补充，可能需要多轮
+- **Scenario 生成**：AI 生成
+- **AI 辅助审查 Scenario**：强烈推荐（使用子 agent，可能需要多轮）
+- **人工 Scenario 审查**：基于 AI 审查报告，多轮审查，必要时拉入领域专家
+- **示例**：「重构支付系统，支持多币种」
+
+## Epic（史诗）
+
+- **特征**：跨多个 Complex 模块的系统级需求，单个 Spec 无法承载，模块间有明确依赖关系
+- **前置步骤**：必须先执行 **Plan（Epic 分解）**，将需求拆解为多个独立模块，再对每个模块独立走 spec-driven-dev 流程
+- **Plan 内容**：模块列表（名称 + 边界 + 上游依赖 + 下游契约 + 复杂度评估）+ 依赖关系图
+- **人工 Plan Review**：人确认模块边界合理、依赖关系正确、没有遗漏的集成点
+- **后续流程**：按依赖顺序，对每个模块独立启动 spec-driven-dev 流，复杂度由各模块自身评估决定
+- **示例**：「从零实现移动端 Shell 客户端」、「重构整个支付与计费系统」
+
+---
+
+# Epic 处理：Plan 步骤
+
+当需求为 Epic 时，在进入 spec-driven-dev 流程之前，必须先完成 Plan。
+
+## Plan 的职责
+
+Plan 回答三个问题，**仅此三个**：
+
+1. **What** — 有哪些模块（每个模块的名称和边界）
+2. **Order** — 依赖关系（哪些必须串行，哪些可以并行）
+3. **Contract** — 模块间接口（上游产出什么，下游消费什么）
+
+Plan **不回答**实现细节（协议格式、API 签名、状态机定义）——这些属于各模块的 Spec。
+
+## Plan 输出格式
+
+每个模块一个条目：
+
+```markdown
+## Module: [模块名称]
+
+- **边界**：[这个模块负责构建什么，一句话]
+- **模块依赖**：[需要从哪些上游模块消费什么契约，没有则写"无"]
+- **产出契约**：[这个模块暴露给下游的接口/能力]
+- **复杂度**：[Trivial / Simple / Medium / Complex]
+```
+
+加上依赖关系图（文字或 ASCII 表示模块串/并行关系）。
+
+## Plan 的完整流程
+
+```
+Epic 需求
+  ↓
+[Plan 生成]（人描述需求 → AI 生成模块拆解草稿 → 人修订）
+  ↓
+[Human Plan Review]（确认边界合理、依赖正确、契约完整）
+  ↓
+按依赖顺序，对每个模块启动独立的 spec-driven-dev 流：
+  Module A（Complex）: Spec → Review → Scenario → Review → Tests → Impl → CI
+  Module B（Medium）:  Spec → Review → Scenario → Tests → Impl → CI  ← 依赖 A
+  Module C（Simple）:  Spec → Scenario → Tests → Impl → CI            ← 并行于 B
+  ...
+```
+
+## Plan Review 检查点
+
+人工审查 Plan 时确认：
+
+- ✅ 每个模块边界清晰、职责单一
+- ✅ 没有模块承担了它不该承担的职责（实现细节不在 Plan 里）
+- ✅ 依赖关系图完整（没有循环依赖，没有遗漏的集成点）
+- ✅ 每个模块的产出契约足够明确，下游可以据此写 Spec
+- ✅ 并行路径识别合理（可以并行的没有被串行化）
+
+---
+
+# 迭代修正机制
+
+任何阶段发现问题，允许回退上一步。
+
+## AI 辅助审查 Spec 后发现问题
+
+→ 人根据 AI 审查报告修订 Spec → 可选：再次 AI 辅助审查 → 人确认
+
+## Scenario 生成后发现 Spec 有歧义
+
+→ 标记问题 → 人修订 Spec → 可选：AI 辅助审查 Spec → AI 重新生成 Scenario → 人重新审查
+
+## AI 辅助审查 Scenario 后发现 Spec 遗漏
+
+→ 人修订 Spec → AI 重新生成 Scenario → 可选：AI 辅助审查 Scenario → 人重新审查
+
+## Test 实现后发现 Scenario 无法自动化
+
+→ 与人确认 → 调整 Scenario 或测试策略 → 重新实现
+
+## Feature 实现后发现 Spec 逻辑矛盾
+
+→ 停止实现 → 人修订 Spec → AI 重新生成 Scenario/Test/Feature
+
+## CI 失败
+
+→ 分析失败原因 → 判断是测试问题还是实现问题 → 修正 → 重新验证
+
+## Spec 编写时发现 Plan 模块边界错误
+
+→ 停止写 Spec → 人修订 Plan（调整模块边界或拆分模块）→ Human Plan Review → 重新编写受影响模块的 Spec
+
+## Test / Feature 实现时发现模块间契约冲突
+
+→ 停止实现 → 确认根因是 Plan 的契约定义有歧义（而非单模块 Spec 问题）→ 人修订 Plan 中相关模块的"产出契约"→ 受影响模块重新走 Spec → Scenario → Test → Feature
+
+**Plan 回退的触发条件须严格限定**，以下情况不应回退 Plan：
+
+- 模块内部实现细节变化（在 Spec 层处理）
+- 边界案例补充（在 Scenario 层处理）
+- 接口签名调整但语义不变（在 Spec 层处理）
+
+## 关键原则
+
+**Spec 和 Scenario 是人审查的，发现问题必须回退到人审查环节。**
+
+**Plan 是模块边界和契约的唯一真理源**，发现跨模块的边界或契约问题必须回退到 Plan，不允许在 Spec 层悄悄扩展边界。
+
+不允许 AI 自行修改 Spec、Scenario 或 Plan 的语义。
+
+AI 辅助审查只是提供建议，最终决策权在人。
+
+---
+
+# 工作流
+
+## 步骤 1 — 编写 Spec
+
+人或 AI 创建结构化 markdown 规范，描述系统行为。
+
+推荐章节：
+
+- Feature（功能）
+- Goal（目标）
+- Rules（规则）
+- States（状态，可选）
+- State Transitions（状态转换，可选）
+
+> Edge Cases 不在 Spec 里定义——重要的边界规则直接写入 Rules，其余边界案例由 AI 在 Scenario Generation 阶段从 Rules 系统性推导。
+
+示例：
+
+```markdown
+# Feature: 订单折扣
+
+## Goal
+
+允许用户在创建订单时应用折扣码。
+
+## Rules
+
+- discount_code 是可选的
+- 无效代码返回 INVALID_CODE
+- 过期代码返回 EXPIRED_CODE
+- 最大折扣为 50%
+- 折扣不能超过订单总额
+- 折扣不能为负数
+```
+
+---
+
+## 步骤 1.5 — AI 辅助审查 Spec（可选）
+
+在 Spec 阶段发现问题，成本最低。**使用子 agent 进行独立审查**。
+
+### 为什么需要 Spec 的 AI 辅助审查？
+
+- **Spec 质量直接影响后续所有步骤**：Spec 有问题，后续全错
+- **人容易遗漏细节**：特别是复杂 Spec，容易遗漏边界案例、状态转换、错误处理
+- **提前发现问题成本更低**：在 Spec 阶段发现问题，比在实现阶段发现成本低得多
+
+### 何时使用 Spec 的 AI 辅助审查？
+
+根据复杂度决定：
+
+- **Trivial**：跳过（Spec 很简单，人快速确认即可）
+- **Simple**：可选
+- **Medium**：推荐（Spec 开始变复杂，容易遗漏）
+- **Complex**：强烈推荐（Spec 复杂，必须有 AI 帮助检查）
+
+### 审查流程
+
+```
+主 agent：调用子 agent (使用 Task tool)
+
+子 agent：
+  ├─ 读取 Spec
+  ├─ 检查完整性（缺少的章节、规则、边界案例）
+  ├─ 检查一致性（术语、逻辑、规则冲突）
+  ├─ 检查歧义（模糊的描述、未定义的行为）
+  ├─ 检查风险（安全、性能、可靠性、兼容性）
+  └─ 输出审查报告
+
+主 agent：展示审查报告给人
+```
+
+### 审查报告内容
+
+子 agent 应输出：
+
+1. **完整性检查**
+   - 已定义的内容
+   - 缺少的内容（目标、规则、边界案例、状态转换、错误处理、前置条件等）
+
+2. **一致性检查**
+   - 术语使用是否一致
+   - 规则之间是否有冲突
+   - 逻辑是否有矛盾
+
+3. **歧义检查**
+   - 模糊的描述（需要明确的地方）
+   - 未定义的行为（需要补充的地方）
+   - 不明确的边界（需要精确定义的地方）
+
+4. **风险检查**
+   - **安全风险**：权限、数据泄露、注入攻击
+   - **性能风险**：N+1 查询、大数据量、超时
+   - **可靠性风险**：并发问题、幂等性、重试机制
+   - **兼容性风险**：breaking change、数据迁移
+
+5. **建议补充**
+   - 建议增加的章节
+   - 建议明确的前置条件
+   - 建议定义的依赖关系
+   - 建议考虑的非功能性需求（性能、安全、可用性）
+
+---
+
+## 步骤 1.6 — 人工审查/修订 Spec
+
+人基于 AI 审查报告（如有），审查并修订 Spec。
+
+重点确认：
+
+- Spec 是否完整（目标、规则、边界案例都已定义）
+- Spec 是否清晰（无歧义、无矛盾）
+- Spec 是否考虑了风险（安全、性能、可靠性）
+
+修订后，进入下一步。
+
+### Definition of Ready (DoR)
+
+在进入实现阶段前，确认以下条件已满足：
+
+- ✅ 功能目标清晰
+- ✅ 业务规则已定义（含已知边界规则）
+- ✅ 范围有界
+- ✅ 依赖项已知
+
+如不清楚，AI 必须提出澄清问题。
+
+**DoR 是进入步骤 2（生成测试场景）的门禁。**
+
+---
+
+## 步骤 2 — 生成测试场景
+
+主 agent 读取 Spec 并生成人类可读的行为场景。
+
+场景必须以自然语言行为检查的形式编写，并标注测试类型。
+
+首选格式：
+
+```
+[TEST_TYPE] 用户执行操作
+→ 系统行为
+
+[CRITICAL][TEST_TYPE] 用户执行高风险操作
+→ 系统行为
+```
+
+示例：
+
+```
+[INTEGRATION] 用户创建订单时不提供折扣码
+→ 订单正常创建
+
+[CRITICAL][CONTRACT] 用户创建订单时提供过期的折扣码
+→ 请求失败，返回 EXPIRED_CODE
+```
+
+不要输出测试函数名。
+
+---
+
+## 步骤 2.5 — AI 辅助审查（可选）
+
+为提高审查效率和质量，**使用子 agent 进行独立审查**。
+
+### 为什么使用子 agent？
+
+- **独立视角**：子 agent 从新的上下文开始，不受主 agent 生成过程的影响
+- **同行评审**：类似代码审查中的 peer review，更容易发现盲点
+- **专注审查**：使用专门的审查提示词，聚焦于"挑问题"
+
+**不要让同一个 agent 审查自己刚生成的内容**，会陷入相同的思维盲区。
+
+### 何时使用 AI 辅助审查？
+
+根据复杂度决定：
+
+- **Trivial**：跳过，人直接快速确认
+- **Simple**：可选，人可以选择跳过以提高效率
+- **Medium/Complex**：强烈推荐，减少人工审查负担
+
+### 审查流程
+
+```
+主 agent：调用子 agent (使用 Task tool)
+
+子 agent：
+  ├─ 读取 Spec
+  ├─ 读取生成的 Scenario
+  ├─ 按照审查清单进行预审查
+  └─ 输出审查报告
+
+主 agent：展示审查报告给人
+```
+
+### 审查报告内容
+
+子 agent 应输出：
+
+1. **业务覆盖度分析**
+   - 已覆盖的业务规则
+   - 可能遗漏的业务规则
+
+2. **边界案例检查**
+   - 已覆盖的边界案例
+   - 可能遗漏的边界案例（空值、边界值、权限等）
+
+3. **失败案例检查**
+   - 已覆盖的失败场景
+   - 可能遗漏的失败场景
+
+4. **测试类型标记检查**
+   - 每个场景是否都标注了测试类型（CONTRACT / INTEGRATION / PROPERTY / UNIT）
+   - 测试类型是否合理（如契约场景是否标为 CONTRACT）
+
+5. **契约风险检查**
+   - 涉及 API 契约的场景是否标记为 [CRITICAL][CONTRACT]
+   - 是否遗漏了关键的契约测试
+
+6. **关键测试标记建议**
+   - 哪些场景应该标记为 [CRITICAL]
+   - 理由
+
+7. **建议补充的场景**（如有）
+
+---
+
+## 步骤 3 — 人工场景审查
+
+人工审查场景。
+
+如果进行了 AI 辅助审查，人只需要：
+
+1. 阅读 AI 的审查报告
+2. 重点关注 AI 标记的 **[CRITICAL]** 场景
+3. 确认每个场景的**测试类型标记**合理
+4. 做最终确认
+
+如果未进行 AI 辅助审查，人需要重点验证：
+
+- 业务规则已覆盖
+- 重要流程存在
+- 危险案例存在
+- 禁止行为存在
+- 场景反映预期行为
+- 每个场景的测试类型标记合理
+
+**人工审查行为 + 测试策略，不审查测试代码。**
+
+---
+
+## 步骤 4 — 实现测试
+
+AI 将批准的场景转换为自动化测试。
+
+**当 spec 和 scenario 已存在时，AI 默认一把梭连续完成步骤 4 → 5 → 6，不中途停止。** 唯一允许停下的情况：遇到真实阻塞（Spec 歧义、需要人工决策的架构分歧），必须明确说明原因。
+
+**前置：建立 Implementation Stub**
+
+在写测试之前，先检查被测模块的实现文件是否存在且 import 路径可解析。如果不存在，必须先创建 Implementation Stub（正确路径 + 正确导出签名 + `throw new Error('not implemented')` 函数体）。**Stub 仅用于避免 import 失败，不计入测试完成度，建立后立即继续写行为测试。**
+
+要求：
+
+- **按场景的测试类型标记（CONTRACT / INTEGRATION / PROPERTY / UNIT）决定测试类型**，不自行判断
+- 测试行为而非内部实现
+- 避免与私有辅助函数绑定的脆弱测试
+- **禁止使用 `skip` / 条件执行代替"实现不存在"**——实现 Stub 后测试必须可运行且为红色
+- **禁止以"scaffold 完成"或"stub 已建立"作为交付物**——必须继续完成场景级行为测试
+
+---
+
+## 步骤 5 — 实现功能
+
+AI 在以下约束下实现功能：
+
+- 遵循 Spec
+- 满足所有测试
+- 保持最小范围
+- 避免无关重构
+- 除非明确更改，否则保留外部契约
+
+---
+
+## 步骤 6 — CI 验证
+
+功能完成需要通过检查。
+
+最低检查：
+
+- lint
+- typecheck
+- tests
+- CI pipeline
+
+可选检查：
+
+- contract validation
+- snapshot validation
+- benchmark checks
+- migration safety
+
+### Definition of Done (DoD)
+
+任务完成的标准：
+
+- ✅ Spec 存在或已更新
+- ✅ 场景已生成并审查
+- ✅ 测试已实现并通过
+- ✅ 功能实现通过测试
+- ✅ CI 检查通过
+- ✅ 避免无关重构
+- ✅ 现有行为未被静默破坏
+
+可选：
+
+- 文档已更新
+- changelog 已更新
+- 迁移计划已记录
+
+**DoD 是整个任务完成的检查清单。**
+
+---
+
+# 场景格式
+
+使用人类可读的行为描述。
+
+首选格式：
+
+```
+用户执行操作
+→ 系统响应
+```
+
+示例：
+
+```
+用户创建未付款订单
+→ 订单状态变为 CREATED
+
+用户支付现有订单
+→ 订单状态变为 PAID
+
+用户取消已发货订单
+→ 取消失败
+```
+
+避免审查原始测试名称，例如：
+
+```
+test_cancel_shipped_order_should_fail
+```
+
+## 场景标记
+
+AI 生成场景时，每个场景必须标注 **测试类型** + 可选的 **[CRITICAL]**。
+
+### 测试类型标记
+
+| 标记 | 适用场景 |
+|------|---------|
+| `[CONTRACT]` | API 响应结构、错误码、对外承诺 |
+| `[INTEGRATION]` | 端到端业务流程 |
+| `[PROPERTY]` | 不变量（任意输入下成立的规则）|
+| `[UNIT]` | 单一函数/规则的孤立验证 |
+
+优先级：**CONTRACT > INTEGRATION > PROPERTY > UNIT**
+
+### 关键测试标记
+
+高风险场景额外加 `[CRITICAL]`：
+
+```
+[CRITICAL][CONTRACT] 用户尝试使用过期折扣码
+→ 请求失败，返回 EXPIRED_CODE，不扣减库存
+
+[CRITICAL][INTEGRATION] 管理员删除有关联订单的用户
+→ 删除失败，保护数据完整性
+
+[PROPERTY] 折扣金额不超过订单总额
+→ 任意输入下此不变量成立
+
+[INTEGRATION] 用户查看订单列表
+→ 返回按创建时间倒序的订单
+```
+
+`[CRITICAL]` 判断标准：
+
+1. **Contract（契约）**：涉及 API 响应结构、错误码、对外承诺
+2. **Money（金钱）**：涉及支付、退款、折扣计算
+3. **Permission（权限）**：涉及访问控制、数据安全
+4. **State Transition（状态转换）**：涉及关键业务状态变化
+5. **Data Integrity（数据完整性）**：涉及数据一致性、关联完整性
+
+人工审查时，**优先关注标记为 [CRITICAL] 的场景**。
+
+---
+
+# 测试什么
+
+按此顺序优先测试：
+
+1. 契约稳定性
+2. 主要业务流程
+3. 关键业务规则
+4. 危险边界案例
+5. 不变量/属性
+
+---
+
+## 契约测试
+
+保护 API 和模式稳定性。
+
+示例：
+
+- API 响应字段
+- 事件负载结构
+- 错误代码
+- 权限行为
+
+---
+
+## 集成测试
+
+验证端到端工作流。
+
+示例：
+
+- 创建订单
+- 支付订单
+- 取消订单
+- 退款订单
+
+---
+
+## 属性测试
+
+验证不变量。
+
+示例：
+
+- 订单总额永远不能为负
+- 库存永远不能为负
+- 订单不能有两个最终状态
+
+---
+
+# 不要过度测试什么
+
+避免过度测试：
+
+- 私有辅助函数
+- 内部实现细节
+- 琐碎逻辑
+- 脆弱的快照
+- 重复案例
+
+只有在保护行为时，高覆盖率才有价值。
+
+---
+
+# 提示模板
+
+所有提示模板已移至 `references/` 目录，方便维护和复用：
+
+- [AI 辅助审查 Spec](./references/prompt-spec-review.md) - 子 agent 用于审查 Spec 的提示词
+- [场景生成](./references/prompt-scenario-generation.md) - 从 Spec 生成测试场景的提示词
+- [AI 辅助审查场景](./references/prompt-scenario-review.md) - 子 agent 用于审查场景的提示词
+- [测试实现](./references/prompt-test-implementation.md) - 根据场景实现测试的提示词
+- [功能实现](./references/prompt-feature-implementation.md) - 根据 Spec 和测试实现功能的提示词
+- [测试扩展](./references/prompt-test-expansion.md) - 建议额外高价值测试场景的提示词
+
+---
+
+# 推荐仓库结构
+
+```
+spec/
+tests/
+src/
+```
+
+可选结构（monorepo）：
+
+```
+spec/
+  feature.md
+
+apps/my-app/                    ← workspace
+  src/
+    services/
+      UserService.ts
+      UserService.test.ts       ← UNIT + PROPERTY，colocate
+  tests/
+    contract/                   ← CONTRACT，子目录镜像 src/
+    integration/                ← INTEGRATION，子目录镜像 src/
+
+libs/my-lib/                    ← 另一个 workspace
+  src/
+    AuthToken.ts
+    AuthToken.test.ts           ← UNIT + PROPERTY，colocate
+  tests/
+    contract/
+    integration/
+```
+
+**归属原则：测试先归属 workspace，再按类型分目录。禁止跨 workspace 在仓库根聚合测试。**
+
+测试优先级：
+
+**contract > integration > property > unit**
+
+---
+
+# 最终规则
+
+永远不允许 AI 从模糊请求直接跳到代码。
+
+**判断入口**：收到开发需求时，首先判断是 Epic 还是单模块：
+
+- 需求跨多个模块、有明确模块间依赖 → **Epic**，必须先走 Plan
+- 需求范围清晰、单模块可承载 → **直接走 Spec 层**
+
+**Epic 流程**：
+
+```
+Plan（模块拆解 + 依赖图 + 契约）
+→ Human Plan Review
+→ 对每个模块独立执行 Spec 层流程（按依赖顺序，可并行）
+```
+
+**Spec 层流程**（每个模块）：
+
+```
+Spec
+→ AI-Assisted Spec Review (可选，使用子 agent)
+→ Human Spec Review
+→ Scenario Generation
+→ AI-Assisted Scenario Review (可选，使用子 agent)
+→ Human Scenario Review
+→ Test Implementation
+→ Feature Implementation
+→ CI Verification
+```
