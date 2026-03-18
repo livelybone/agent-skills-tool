@@ -36,7 +36,9 @@ metadata:
 3. **写入本轮任务**：controller 将任务描述写入 `$WORKDIR/.agent-loop/<task-name>/task.md`，参考 `templates/agent-prompt.txt`，要求 worker 只输出结构化发现，不输出推理过程或完整日志。
 4. **静默启动 worker**：
    - `codex` 主 worker：`./scripts/run_agent.sh codex <task-name> <task.md路径> agent <workdir>`
+     - ⚠️ macOS + Claude Code 环境下，必须以 `dangerouslyDisableSandbox: true` 调用（详见「已知平台问题」）。Codex 自身沙箱仍生效，安全性不受影响。
    - `claude` 主 worker：`./scripts/run_agent.sh claude <task-name> <task.md路径> agent <workdir>`
+     - 无平台限制，可在任意环境直接运行。
    - worker 以后台进程运行，controller 不阻塞等待。
 5. **轮询等待 worker 完成**：worker 执行耗时因任务复杂度差异很大（数秒到数分钟均属正常），controller 需要耐心等待，通过定时轮询 `*-status.txt` 判断是否完成：
    - 轮询间隔：每 **30 秒** 检查一次 `worker-status.txt`（或 `peer-status.txt`）
@@ -53,10 +55,12 @@ metadata:
 8. **需要第二视角时拉起 peer**：controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 worker 产物。peer 读取主 worker 的 `worker-output.md`，输出自己对这份发现的独立意见（支持、质疑或补充）。controller 读取两份发现后再裁决。
    - `codex` peer：`./scripts/run_agent.sh codex <task-name> <peer-task.md路径> peer <workdir>`
    - `claude` peer：`./scripts/run_agent.sh claude <task-name> <peer-task.md路径> peer <workdir>`
-9. **有界循环**：每一轮独立运行，与上一轮无因果依赖（上一轮的变更可能被顺带审查，但不是触发下一轮的条件）。满足以下任一条件即停止：
-   - 达到最大论述 3 轮时
-   - 本轮 worker 没有 Major 及以上级别的观点时
-   - 本轮存在无法判断的点时(停止之后, 还要升级给用户裁决)
+9. **有界循环**：每一轮在执行层面独立——worker 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
+   - **继续条件**：本轮 worker 报告了 Major 及以上级别的发现 → controller 裁决并修复后，启动下一轮由新 worker 独立审查当前状态（不限于验证上一轮修复，而是对最新代码做全量/增量审查）。
+   - **暂停条件**：本轮存在无法判断的点 → 升级给用户裁决。用户裁决完成后，controller 根据继续/终止条件决定是否启动下一轮。
+   - **终止条件**（满足任一即停止）：
+     - 达到最大 3 轮
+     - 本轮 worker 报告中没有 Major 及以上级别的发现
 
 # 工作目录结构
 
@@ -111,8 +115,8 @@ $WORKDIR/.agent-loop/
 ```
 
 级别说明：
-- `[Critical]`：功能错误、安全漏洞、数据损坏风险；有 Critical 则 controller 继续循环
-- `[Major]`：显著质量问题；强烈建议修复，不强制继续循环
+- `[Critical]`：功能错误、安全漏洞、数据损坏风险；必须修复并在下一轮验证
+- `[Major]`：显著质量问题；必须修复并在下一轮验证
 - `[Minor]`：风格、文档、可读性；可选修复
 - `[Info]`：纯观察，无需动作
 
@@ -136,6 +140,12 @@ $WORKDIR/.agent-loop/
 2. 执行 `./skills/multi-agent-loop/scripts/run_agent.sh codex test-task .agent-loop/test-task/peer-task.md peer <repo>`，确认产生 `peer-output.md`、`peer.log`，且 `worker-output.md` 未被覆盖
 3. 执行 `./skills/multi-agent-loop/scripts/run_agent.sh claude test-task .agent-loop/test-task/task.md agent <repo>`，确认行为一致
 4. 确认多个 task-name 并行不冲突
+
+# 已知平台问题
+
+| 平台 | Runner | 问题 | 应对 |
+|------|--------|------|------|
+| macOS + Claude Code sandbox | `codex` | Claude Code sandbox 阻止访问 macOS `SCDynamicStore` 系统守护进程，导致 Codex CLI 的 `system-configuration` crate panic | controller 启动 `codex` worker 时必须禁用 sandbox（`dangerouslyDisableSandbox: true`），或改用 `claude` runner（不受此影响） |
 
 # 不覆盖范围
 
