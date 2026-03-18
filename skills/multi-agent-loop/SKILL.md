@@ -37,17 +37,23 @@ metadata:
 4. **静默启动 worker**：
    - `codex` 主 worker：`./scripts/run_agent.sh codex <task-name> <task.md路径> agent <workdir>`
    - `claude` 主 worker：`./scripts/run_agent.sh claude <task-name> <task.md路径> agent <workdir>`
-5. **只读取结构化文件**：
+   - worker 以后台进程运行，controller 不阻塞等待。
+5. **轮询等待 worker 完成**：worker 执行耗时因任务复杂度差异很大（数秒到数分钟均属正常），controller 需要耐心等待，通过定时轮询 `*-status.txt` 判断是否完成：
+   - 轮询间隔：每 **30 秒** 检查一次 `worker-status.txt`（或 `peer-status.txt`）
+   - 超时上限：**10 分钟**；超时后视为 error，记录日志并升级给用户
+   - 判断逻辑：文件内容为 `done` → 成功完成；`error` → 失败；空或不存在 → 仍在运行
+   - 轮询期间 controller 不应做其他裁决动作，避免读到不完整的输出
+6. **只读取结构化文件**：
    - 允许读取：`worker-output.md`、`peer-output.md`（如有 peer）
    - 不允许默认读取：`worker.log`、`peer.log`
-6. **controller 逐条裁决 worker 发现**：worker 可能返回多条独立发现，controller 对每一条独立判断：
+7. **controller 逐条裁决 worker 发现**：worker 可能返回多条独立发现，controller 对每一条独立判断：
    - 明显正确且局部可执行 → 直接应用
    - 明显错误或脱离上下文 → 拒绝，记录原因
    - 涉及产品、架构、安全、权衡判断 → 暂停，升级给用户
-7. **需要第二视角时拉起 peer**：controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 worker 产物。peer 读取主 worker 的 `worker-output.md`，输出自己对这份发现的独立意见（支持、质疑或补充）。controller 读取两份发现后再裁决。
+8. **需要第二视角时拉起 peer**：controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 worker 产物。peer 读取主 worker 的 `worker-output.md`，输出自己对这份发现的独立意见（支持、质疑或补充）。controller 读取两份发现后再裁决。
    - `codex` peer：`./scripts/run_agent.sh codex <task-name> <peer-task.md路径> peer <workdir>`
    - `claude` peer：`./scripts/run_agent.sh claude <task-name> <peer-task.md路径> peer <workdir>`
-8. **有界循环**：只有当 controller 本轮应用了至少一处变更时，才进入下一轮（变更后的状态值得重新验证）。满足以下任一条件即停止：
+9. **有界循环**：每一轮独立运行，与上一轮无因果依赖（上一轮的变更可能被顺带审查，但不是触发下一轮的条件）。满足以下任一条件即停止：
    - 达到最大论述 3 轮时
    - 本轮 worker 没有 Major 及以上级别的观点时
    - 本轮存在无法判断的点时(停止之后, 还要升级给用户裁决)
@@ -119,7 +125,7 @@ $WORKDIR/.agent-loop/
 - 升级条件必须明确：架构取舍、权限边界、安全风险
 - 不得宣称"agent 原生互调"；准确表述为"controller 通过 CLI 子进程启动 worker"
 - 结构化输出文件必须与原始日志文件分离
-- `worker-status.txt` / `peer-status.txt` 只用于判断**本次 `run_agent.sh` 调用**是否成功，不用于决定是否发起下一轮；是否继续循环由 controller 根据裁决结果判断，不读 status 文件
+- `worker-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 worker 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断
 - `run_agent.sh` 首次运行时自动将 `.agent-loop/` 加入 `.git/info/exclude`，避免协议文件污染 worker 的仓库视图
 
 # 验证方式
