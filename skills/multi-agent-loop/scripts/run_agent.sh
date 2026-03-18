@@ -15,9 +15,9 @@ TASK_DIR="$WORKDIR/.agent-loop/$TASK_NAME"
 
 case "$ROLE" in
   agent)
-    OUTPUT_FILE="$TASK_DIR/worker-output.md"
-    LOG_FILE="$TASK_DIR/worker.log"
-    STATUS_FILE="$TASK_DIR/worker-status.txt"
+    OUTPUT_FILE="$TASK_DIR/agent-output.md"
+    LOG_FILE="$TASK_DIR/agent.log"
+    STATUS_FILE="$TASK_DIR/agent-status.txt"
     ;;
   peer)
     OUTPUT_FILE="$TASK_DIR/peer-output.md"

@@ -96,6 +96,7 @@ libs/services/                       ← 另一个 workspace，结构相同
 - ❌ 驼峰/kebab-case 混用（被测文件是 `UserService.ts`，测试文件不能叫 `user-service.test.ts`）
 - ❌ 将不同测试类型混写在同一个测试文件中
 - ❌ 不确定命名规范时自行发明，必须先检查现有测试文件的命名模式
+- ❌ 将 UNIT / PROPERTY 测试放到 `__tests__/` 目录（这是 Jest 遗留约定，应 colocate 在被测文件同级）
 
 ## 要求
 
