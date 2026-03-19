@@ -60,7 +60,7 @@ metadata:
    - **暂停条件**：本轮存在无法判断的点 → 升级给用户裁决。用户裁决完成后，controller 根据继续/终止条件决定是否启动下一轮。
    - **终止条件**（满足任一即停止）：
      - 达到最大 3 轮
-     - 经 controller 重新评估后，本轮无 Major 及以上级别的发现（即使 agent 标注了 Major，controller 判定实质为 Minor 则视为无 Major）
+     - 经 controller 重新评估后，本轮无 Major 及以上级别的发现（即使 agent 标注了 Major，controller 判定实质为 Minor 则视为无 Major）。注意：若本轮存在真 Major 并已修复，仍属"本轮有 Major"，应走继续条件启动下一轮验证，而非视为终止
      - 本轮无新洞察（所有发现均为上一轮修复的传播遗漏或命名风格偏好等重复性检查）
 
 # 工作目录结构
