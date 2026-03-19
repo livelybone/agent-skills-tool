@@ -46,7 +46,7 @@ metadata:
    - 轮询期间 controller 不应做其他裁决动作，避免读到不完整的输出
 6. **只读取结构化文件**：
    - 允许读取：`agent-output.md`、`peer-output.md`（如有 peer）
-   - 不允许默认读取：`agent.log`、`peer.log`
+   - **严禁读取 `agent.log`、`peer.log`**，除非用户明确授权（如调试失败时用户主动要求查看）。读取前必须向用户确认
 7. **controller 逐条裁决 agent 发现**：agent 可能返回多条独立发现，controller 对每一条独立判断：
    - 明显正确且局部可执行 → 直接应用
    - 明显错误或脱离上下文 → 拒绝，记录原因
@@ -55,11 +55,13 @@ metadata:
    - `codex` peer：`./scripts/run_agent.sh codex <task-name> <peer-task.md路径> peer <workdir>`
    - `claude` peer：`./scripts/run_agent.sh claude <task-name> <peer-task.md路径> peer <workdir>`
 9. **有界循环**：每一轮在执行层面独立——agent 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
-   - **继续条件**：本轮 agent 报告了 Major 及以上级别的发现 → controller 裁决并修复后，启动下一轮由新 agent 独立审查当前状态（不限于验证上一轮修复，而是对最新代码做全量/增量审查）。
+   - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
+   - **继续条件**：经 controller 重新评估后，本轮仍存在 Major 及以上级别的发现 → 裁决并修复后，启动下一轮由新 agent 独立审查当前状态（不限于验证上一轮修复，而是对最新代码做全量/增量审查）。
    - **暂停条件**：本轮存在无法判断的点 → 升级给用户裁决。用户裁决完成后，controller 根据继续/终止条件决定是否启动下一轮。
    - **终止条件**（满足任一即停止）：
      - 达到最大 3 轮
-     - 本轮 agent 报告中没有 Major 及以上级别的发现
+     - 经 controller 重新评估后，本轮无 Major 及以上级别的发现（即使 agent 标注了 Major，controller 判定实质为 Minor 则视为无 Major）
+     - 本轮无新洞察（所有发现均为上一轮修复的传播遗漏或命名风格偏好等重复性检查）
 
 # 工作目录结构
 
@@ -72,8 +74,8 @@ $WORKDIR/.agent-loop/
     peer-task.md     # controller 写入的 peer 任务指令，可选（需包含 agent-output.md 路径）
     agent-output.md  # 主 agent 的结构化发现（controller 读取后裁决）
     peer-output.md   # peer 对主 agent 发现的独立意见，可选（controller 读取后裁决）
-    agent.log        # 主 agent 原始输出，默认禁止读取
-    peer.log         # peer 原始输出，默认禁止读取
+    agent.log        # 主 agent 原始输出，严禁读取（需用户明确授权）
+    peer.log         # peer 原始输出，严禁读取（需用户明确授权）
     agent-status.txt # 主 agent 运行状态：done | error
     peer-status.txt  # peer 运行状态：done | error
 ```
@@ -112,6 +114,7 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 - 必须限制循环轮数，禁止无界自反馈
 - 升级条件必须明确：架构取舍、权限边界、安全风险
 - 不得宣称"agent 原生互调"；准确表述为"controller 通过 CLI 子进程启动 agent"
+- controller 裁决时必须独立判断严重度，不得直接采信 agent 标注。已知退化模式：后期轮次 agent 将 Minor 膨胀为 Major、将"修复未传播"包装为新发现
 - 结构化输出文件必须与原始日志文件分离
 - `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断
 - `run_agent.sh` 首次运行时自动将 `.agent-loop/` 加入 `.git/info/exclude`，避免协议文件污染 agent 的仓库视图
