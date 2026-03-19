@@ -88,15 +88,16 @@ libs/services/                       ← 另一个 workspace，结构相同
 
 **前置步骤：在写测试前，先检查项目里已有的测试文件命名模式（`.test.ts` 还是 `.spec.ts`，目录结构如何组织），与现有模式保持一致。**
 
+`__tests__/` 目录仅用于存放测试辅助工具（helpers、fixtures、mocks、test utilities），不存放测试文件本身。
+
 禁止：
 - ❌ [monorepo] 将测试放到仓库根 `tests/` 目录（应放在各自 workspace 内）
-- ❌ 将 UNIT / PROPERTY 测试放到 `tests/` 目录（应 colocate 在 `src/` 中）
+- ❌ 将 UNIT / PROPERTY 测试放到 `tests/` 或 `__tests__/` 目录（应 colocate 在 `src/` 中）
 - ❌ 将 CONTRACT / INTEGRATION 测试放到 `src/` 中（应放到 `tests/` 目录）
 - ❌ 用模块名或功能名随意命名（如 `cloud-gateway.test.ts` 对应 `CloudGatewayService.ts`）
 - ❌ 驼峰/kebab-case 混用（被测文件是 `UserService.ts`，测试文件不能叫 `user-service.test.ts`）
 - ❌ 将不同测试类型混写在同一个测试文件中
 - ❌ 不确定命名规范时自行发明，必须先检查现有测试文件的命名模式
-- ❌ 将 UNIT / PROPERTY 测试放到 `__tests__/` 目录（这是 Jest 遗留约定，应 colocate 在被测文件同级）
 
 ## 要求
 
