@@ -44,9 +44,10 @@ metadata:
    - 超时上限：**10 分钟**；超时后视为 error，记录日志并升级给用户
    - 判断逻辑：文件内容为 `done` → 成功完成；`error` → 失败；空或不存在 → 仍在运行
    - 轮询期间 controller 不应做其他裁决动作，避免读到不完整的输出
+   - **禁止使用 `agent.log` / `peer.log` 推断运行状态**：不得通过 `wc -c`、`ls -la`、`tail` 等任何方式读取或探测 log 文件来判断 agent 是否仍在运行。唯一的状态判断来源是 `*-status.txt`。status 为空说明 agent 仍在运行，继续等待即可
 6. **只读取结构化文件**：
    - 允许读取：`agent-output.md`、`peer-output.md`（如有 peer）
-   - **严禁读取 `agent.log`、`peer.log`**，除非用户明确授权（如调试失败时用户主动要求查看）。读取前必须向用户确认
+   - **严禁以任何方式访问 `agent.log`、`peer.log`**——包括但不限于 `cat`、`head`、`tail`、`wc`、`ls -la`、`stat` 等读取内容或元数据的操作。除非用户明确授权（如调试失败时用户主动要求查看），读取前必须向用户确认
 7. **controller 逐条裁决 agent 发现**：agent 可能返回多条独立发现，controller 对每一条独立判断：
    - 明显正确且局部可执行 → 直接应用
    - 明显错误或脱离上下文 → 拒绝，记录原因
