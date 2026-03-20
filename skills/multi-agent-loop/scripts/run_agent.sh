@@ -11,7 +11,16 @@ TASK_NAME="$2"
 PROMPT_FILE="$3"
 ROLE="$4"
 WORKDIR="${5:-$PWD}"
+
+if [[ ! -d "$WORKDIR" ]]; then
+  echo "workdir does not exist: $WORKDIR" >&2
+  exit 2
+fi
+
 TASK_DIR="$WORKDIR/.agent-loop/$TASK_NAME"
+
+# 将 PROMPT_FILE 转为绝对路径，避免 cd "$WORKDIR" 后相对路径解析不一致
+[[ "$PROMPT_FILE" != /* ]] && PROMPT_FILE="$PWD/$PROMPT_FILE"
 
 case "$ROLE" in
   agent)
@@ -26,6 +35,8 @@ case "$ROLE" in
     ;;
   *)
     echo "unsupported role: $ROLE (must be agent or peer)" >&2
+    # STATUS_FILE 未定义，无法写入 status；提前退出是安全的，
+    # 因为 task dir 也未创建，controller 不会误判为"仍在运行"
     exit 2
     ;;
 esac
