@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 4 ]]; then
-  echo "usage: $0 <runner: codex|claude> <task-name> <prompt-file> <role: agent|peer> [workdir]" >&2
+  echo "usage: $0 <runner: codex|claude|crush|opencode> <task-name> <prompt-file> <role: agent|peer> [workdir]" >&2
   exit 2
 fi
 
@@ -78,6 +78,20 @@ run_claude() {
   ) > "$OUTPUT_FILE" 2> "$LOG_FILE"
 }
 
+run_crush() {
+  (
+    cd "$WORKDIR"
+    crush run -q -c "$WORKDIR" < "$PROMPT_FILE"
+  ) > "$OUTPUT_FILE" 2> "$LOG_FILE"
+}
+
+run_opencode() {
+  (
+    cd "$WORKDIR"
+    opencode run < "$PROMPT_FILE"
+  ) > "$OUTPUT_FILE" 2> "$LOG_FILE"
+}
+
 case "$RUNNER" in
   codex)
     if run_codex; then
@@ -88,6 +102,20 @@ case "$RUNNER" in
     ;;
   claude)
     if run_claude; then
+      echo "done" > "$STATUS_FILE"
+      echo "done"
+      exit 0
+    fi
+    ;;
+  crush)
+    if run_crush; then
+      echo "done" > "$STATUS_FILE"
+      echo "done"
+      exit 0
+    fi
+    ;;
+  opencode)
+    if run_opencode; then
       echo "done" > "$STATUS_FILE"
       echo "done"
       exit 0

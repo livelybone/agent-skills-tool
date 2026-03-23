@@ -1,6 +1,6 @@
 ---
 name: multi-agent-loop
-description: 通过文件协议协调多个 coding agent（Claude、Codex）在有界循环中完成 review、discussion、implementation、verification、refactoring 等任务。
+description: 通过文件协议协调多个 coding agent（Claude、Codex、Crush、OpenCode）在有界循环中完成 review、discussion、implementation、verification、refactoring 等任务。
 metadata:
   version: 1.2.0
 ---
@@ -10,11 +10,7 @@ metadata:
 - 需要让一个 coding agent 调用另一个 coding agent 做 review、discussion、implementation、verification、refactoring
 - 需要多个独立视角，但不想把长日志直接灌进当前会话上下文
 - 需要有界循环，最多跑固定轮数，再由 controller 或用户裁决
-- 支持以下拓扑：
-  - `Claude → Codex`
-  - `Claude → Claude`（通过 `claude -p` CLI 子进程，保持上下文隔离）
-  - `Codex → Codex`
-  - `Codex → Claude`
+- 支持以下 runner：`claude`、`codex`、`crush`、`opencode`，可自由组合拓扑（如 `Claude → Crush`、`Claude → OpenCode` 等）
 
 # 核心概念
 
@@ -25,7 +21,7 @@ metadata:
 
 # 必须材料
 
-- 当前环境至少安装一个可无头执行的 agent CLI：`codex` 或 `claude`
+- 当前环境至少安装一个可无头执行的 agent CLI：`codex`、`claude`、`crush` 或 `opencode`
 - `$SKILL_DIR/scripts/run_agent.sh`（`$SKILL_DIR` 指本 skill 的安装目录，即包含此 `SKILL.md` 的目录）
 - 每个任务有唯一的任务名（task-name），用于隔离工作目录
 
@@ -39,6 +35,10 @@ metadata:
      - ⚠️ macOS + Claude Code 环境下，必须以 `dangerouslyDisableSandbox: true` 调用（详见「已知平台问题」）。Codex 自身沙箱仍生效，安全性不受影响。
    - `claude` 主 agent：`$SKILL_DIR/scripts/run_agent.sh claude <task-name> <agent-task.md路径> agent <workdir>`
      - 无平台限制，可在任意环境直接运行。
+   - `crush` 主 agent：`$SKILL_DIR/scripts/run_agent.sh crush <task-name> <agent-task.md路径> agent <workdir>`
+     - 通过 `crush run` 非交互模式执行，需预先配置 provider。
+   - `opencode` 主 agent：`$SKILL_DIR/scripts/run_agent.sh opencode <task-name> <agent-task.md路径> agent <workdir>`
+     - 通过 `opencode run` 非交互模式执行，支持内置免费模型或自配 provider。
 5. **轮询等待 agent 完成**：agent 执行耗时因任务复杂度差异很大（数秒到数分钟均属正常），controller 需要耐心等待，通过定时轮询 `*-status.txt` 判断是否完成：
    - 轮询间隔：每 **30 秒** 检查一次 `agent-status.txt`（或 `peer-status.txt`）
    - 超时上限：**10 分钟**；超时后视为 error，记录日志并升级给用户
@@ -55,6 +55,8 @@ metadata:
 8. **需要第二视角时拉起 peer**：controller 编写单独的 peer 任务文件（如 `peer-task.md`），在指令中明确包含 `agent-output.md` 的路径，要求 peer 读取后给出独立意见。controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 agent 产物。controller 读取两份发现后再裁决。
    - `codex` peer：`$SKILL_DIR/scripts/run_agent.sh codex <task-name> <peer-task.md路径> peer <workdir>`
    - `claude` peer：`$SKILL_DIR/scripts/run_agent.sh claude <task-name> <peer-task.md路径> peer <workdir>`
+   - `crush` peer：`$SKILL_DIR/scripts/run_agent.sh crush <task-name> <peer-task.md路径> peer <workdir>`
+   - `opencode` peer：`$SKILL_DIR/scripts/run_agent.sh opencode <task-name> <peer-task.md路径> peer <workdir>`
 9. **有界循环**：每一轮在执行层面独立——agent 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
    - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
    - **继续条件**：经 controller 重新评估后，本轮仍存在 Major 及以上级别的发现 → 裁决并修复后，启动下一轮由新 agent 独立审查当前状态（不限于验证上一轮修复，而是对最新代码做全量/增量审查）。
@@ -114,7 +116,7 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 
 - 必须区分 `controller` 与 `agent`，controller 不执行任务，只裁决
 - 必须使用唯一 task-name，禁止多任务共用同一工作目录
-- controller 只通过文件读取 agent 输出，不内联读取任何子进程的 stdout/stderr；runner 负责把 agent 输出落盘（codex 用 `-o`，claude 用 stdout 重定向），两种机制均符合此约束
+- controller 只通过文件读取 agent 输出，不内联读取任何子进程的 stdout/stderr；runner 负责把 agent 输出落盘（codex 用 `-o`，claude/crush/opencode 用 stdout 重定向），所有机制均符合此约束
 - 必须限制循环轮数，禁止无界自反馈
 - 升级条件必须明确：架构取舍、权限边界、安全风险
 - 不得宣称"agent 原生互调"；准确表述为"controller 通过 CLI 子进程启动 agent"
@@ -130,13 +132,19 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 1. 执行 `$SKILL_DIR/scripts/run_agent.sh codex test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认产生 `agent-output.md`、`agent.log`、`agent-status.txt`
 2. 执行 `$SKILL_DIR/scripts/run_agent.sh codex test-task .agent-loop/test-task/peer-task.md peer <repo>`，确认产生 `peer-output.md`、`peer.log`，且 `agent-output.md` 未被覆盖
 3. 执行 `$SKILL_DIR/scripts/run_agent.sh claude test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
-4. 确认多个 task-name 并行不冲突
+4. 执行 `$SKILL_DIR/scripts/run_agent.sh crush test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
+5. 执行 `$SKILL_DIR/scripts/run_agent.sh opencode test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
+6. 对 crush/opencode 分别执行 peer 角色（`role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖 agent 产物
+7. 确认多个 task-name 并行不冲突
 
 # 已知平台问题
 
-| 平台                        | Runner  | 问题                                                                                                                   | 应对                                                                                                                        |
-| --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| macOS + Claude Code sandbox | `codex` | Claude Code sandbox 阻止访问 macOS `SCDynamicStore` 系统守护进程，导致 Codex CLI 的 `system-configuration` crate panic | controller 启动 `codex` agent 时必须禁用 sandbox（`dangerouslyDisableSandbox: true`），或改用 `claude` runner（不受此影响） |
+| 平台                        | Runner     | 问题                                                                                                                   | 应对                                                                                                                        |
+| --------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| macOS + Claude Code sandbox | `codex`    | Claude Code sandbox 阻止访问 macOS `SCDynamicStore` 系统守护进程，导致 Codex CLI 的 `system-configuration` crate panic | controller 启动 `codex` agent 时必须禁用 sandbox（`dangerouslyDisableSandbox: true`），或改用 `claude` runner（不受此影响） |
+| macOS + Claude Code sandbox | `crush`    | **未验证**：Crush 基于 Go，可能触发类似系统调用限制                                                                     | 优先尝试 sandbox 内运行；若失败则 `dangerouslyDisableSandbox: true`                                                         |
+| macOS + Claude Code sandbox | `opencode` | **未验证**：OpenCode 基于 Node.js，可能触发类似限制                                                                     | 同上                                                                                                                        |
+| 任意                        | `crush`    | `crush run` + tool calling（文件写入等）存在[已知 bug](https://github.com/charmbracelet/crush/issues/1322)              | 仅用于 review/discussion 等只读任务；implementation 任务优先用 `claude` 或 `codex`                                           |
 
 # 不覆盖范围
 
@@ -151,3 +159,5 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 - `$SKILL_DIR/templates/agent-prompt.txt` — controller 每轮写入 `agent-task.md` / `peer-task.md` 时参考的模板，填入具体任务描述后发给 agent 或 peer
 - 本机 CLI 自检：`codex exec --help`
 - 本机 CLI 自检：`claude --help`
+- 本机 CLI 自检：`crush run --help`
+- 本机 CLI 自检：`opencode run --help`
