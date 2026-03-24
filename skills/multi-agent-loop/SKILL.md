@@ -60,11 +60,11 @@ metadata:
    - `opencode` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode <task-name> <peer-task.md路径> peer <workdir>`
 9. **有界循环**：每一轮在执行层面独立——agent 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
    - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
-   - **继续条件**：经 controller 重新评估后，本轮仍存在 Major 及以上级别的发现 → 裁决并修复后，启动下一轮由新 agent 独立审查当前状态（不限于验证上一轮修复，而是对最新代码做全量/增量审查）。
+   - **继续条件**：经 controller 重新评估后，本轮存在至少一条被裁决为 Major 及以上的发现（无论是否已修复）→ 修复后**必须**启动下一轮，由新 agent 独立审查当前状态。**禁止以任何理由跳过验证轮**——包括但不限于"修复很简单"、"只是文档补充"、"不存在引入新问题的风险"、"可直接确认正确性"。这些都是 rationalization，不构成跳过验证的合法依据。
    - **暂停条件**：本轮存在无法判断的点 → 升级给用户裁决。用户裁决完成后，controller 根据继续/终止条件决定是否启动下一轮。
    - **终止条件**（满足任一即停止）：
      - 达到最大 3 轮
-     - 经 controller 重新评估后，本轮无 Major 及以上级别的发现（即使 agent 标注了 Major，controller 判定实质为 Minor 则视为无 Major）。注意：若本轮存在真 Major 并已修复，仍属"本轮有 Major"，应走继续条件启动下一轮验证，而非视为终止
+     - 经 controller 重新评估后，本轮无 Major 及以上级别的发现（即使 agent 标注了 Major，controller 判定实质为 Minor 则视为无 Major）。**注意**：若本轮存在被裁决为真 Major 的发现并已修复，仍属"本轮有 Major"，必须走继续条件启动下一轮验证，不得视为终止
 
 # 工作目录结构
 
