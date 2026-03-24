@@ -12,15 +12,26 @@ PROMPT_FILE="$3"
 ROLE="$4"
 WORKDIR="${5:-$PWD}"
 
+# TASK_NAME 合法性校验：仅允许字母、数字、连字符、下划线、点（但不能是纯 "." 或 ".."）
+if [[ ! "$TASK_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+  echo "invalid task-name: '$TASK_NAME' (must start with alphanumeric, only contain [a-zA-Z0-9._-])" >&2
+  exit 2
+fi
+
 if [[ ! -d "$WORKDIR" ]]; then
   echo "workdir does not exist: $WORKDIR" >&2
   exit 2
 fi
 
+# 将 WORKDIR 转为绝对路径
+[[ "$WORKDIR" != /* ]] && WORKDIR="$PWD/$WORKDIR"
+
 TASK_DIR="$WORKDIR/.agent-loop/$TASK_NAME"
 
-# 将 PROMPT_FILE 转为绝对路径，避免 cd "$WORKDIR" 后相对路径解析不一致
-[[ "$PROMPT_FILE" != /* ]] && PROMPT_FILE="$PWD/$PROMPT_FILE"
+# 将 PROMPT_FILE 转为绝对路径，基于 WORKDIR 而非 PWD
+if [[ "$PROMPT_FILE" != /* ]]; then
+  PROMPT_FILE="$WORKDIR/$PROMPT_FILE"
+fi
 
 case "$ROLE" in
   agent)
@@ -45,7 +56,7 @@ mkdir -p "$TASK_DIR"
 : > "$STATUS_FILE"
 
 # 自动把 .agent-loop/ 加入本地 git exclude，避免污染 git status
-GIT_DIR="$(git -C "$WORKDIR" rev-parse --git-dir 2>/dev/null || true)"
+GIT_DIR="$(git -C "$WORKDIR" rev-parse --absolute-git-dir 2>/dev/null || true)"
 if [[ -n "$GIT_DIR" ]]; then
   EXCLUDE_FILE="$GIT_DIR/info/exclude"
   mkdir -p "$(dirname "$EXCLUDE_FILE")"

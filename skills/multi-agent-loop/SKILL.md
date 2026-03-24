@@ -31,13 +31,14 @@ metadata:
 2. **选定任务名**：每个任务使用唯一的 `<task-name>`，工作目录为 `$WORKDIR/.agent-loop/<task-name>/`，多任务并行不冲突。
 3. **写入本轮任务**：controller 将任务描述写入 `$WORKDIR/.agent-loop/<task-name>/agent-task.md`，参考 `templates/agent-prompt.txt`，要求 agent 只输出结构化发现，不输出推理过程或完整日志。
 4. **启动 agent**：`run_agent.sh` 本身是同步阻塞的，controller 需要以后台方式调用（如 `run_in_background`、`&`）来实现非阻塞。
-   - `codex` 主 agent：`$SKILL_DIR/scripts/run_agent.sh codex <task-name> <agent-task.md路径> agent <workdir>`
+   - **命令格式约束**：构造 Bash 命令时，必须先将 `$SKILL_DIR` 解析为绝对路径字符串，然后在命令中直接使用该绝对路径字面量。**禁止**在 Bash 命令中使用 `$SKILL_DIR` 变量引用（如 `$SKILL_DIR/scripts/...`）或内联赋值（如 `SKILL_DIR="..." $SKILL_DIR/scripts/...`）。这确保命令格式一致，便于权限规则匹配。
+   - `codex` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh codex <task-name> <agent-task.md路径> agent <workdir>`
      - ⚠️ macOS + Claude Code 环境下，必须以 `dangerouslyDisableSandbox: true` 调用（详见「已知平台问题」）。Codex 自身沙箱仍生效，安全性不受影响。
-   - `claude` 主 agent：`$SKILL_DIR/scripts/run_agent.sh claude <task-name> <agent-task.md路径> agent <workdir>`
+   - `claude` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh claude <task-name> <agent-task.md路径> agent <workdir>`
      - 无平台限制，可在任意环境直接运行。
-   - `crush` 主 agent：`$SKILL_DIR/scripts/run_agent.sh crush <task-name> <agent-task.md路径> agent <workdir>`
+   - `crush` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh crush <task-name> <agent-task.md路径> agent <workdir>`
      - 通过 `crush run` 非交互模式执行，需预先配置 provider。
-   - `opencode` 主 agent：`$SKILL_DIR/scripts/run_agent.sh opencode <task-name> <agent-task.md路径> agent <workdir>`
+   - `opencode` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode <task-name> <agent-task.md路径> agent <workdir>`
      - 通过 `opencode run` 非交互模式执行，支持内置免费模型或自配 provider。
 5. **轮询等待 agent 完成**：agent 执行耗时因任务复杂度差异很大（数秒到数分钟均属正常），controller 需要耐心等待，通过定时轮询 `*-status.txt` 判断是否完成：
    - 轮询间隔：每 **30 秒** 检查一次 `agent-status.txt`（或 `peer-status.txt`）
@@ -53,10 +54,10 @@ metadata:
    - 明显错误或脱离上下文 → 拒绝，记录原因
    - 涉及产品、架构、安全、权衡判断 → 暂停，升级给用户
 8. **需要第二视角时拉起 peer**：controller 编写单独的 peer 任务文件（如 `peer-task.md`），在指令中明确包含 `agent-output.md` 的路径，要求 peer 读取后给出独立意见。controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 agent 产物。controller 读取两份发现后再裁决。
-   - `codex` peer：`$SKILL_DIR/scripts/run_agent.sh codex <task-name> <peer-task.md路径> peer <workdir>`
-   - `claude` peer：`$SKILL_DIR/scripts/run_agent.sh claude <task-name> <peer-task.md路径> peer <workdir>`
-   - `crush` peer：`$SKILL_DIR/scripts/run_agent.sh crush <task-name> <peer-task.md路径> peer <workdir>`
-   - `opencode` peer：`$SKILL_DIR/scripts/run_agent.sh opencode <task-name> <peer-task.md路径> peer <workdir>`
+   - `codex` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh codex <task-name> <peer-task.md路径> peer <workdir>`
+   - `claude` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh claude <task-name> <peer-task.md路径> peer <workdir>`
+   - `crush` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh crush <task-name> <peer-task.md路径> peer <workdir>`
+   - `opencode` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode <task-name> <peer-task.md路径> peer <workdir>`
 9. **有界循环**：每一轮在执行层面独立——agent 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
    - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
    - **继续条件**：经 controller 重新评估后，本轮仍存在 Major 及以上级别的发现 → 裁决并修复后，启动下一轮由新 agent 独立审查当前状态（不限于验证上一轮修复，而是对最新代码做全量/增量审查）。
@@ -129,11 +130,11 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 
 最小验证：
 
-1. 执行 `$SKILL_DIR/scripts/run_agent.sh codex test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认产生 `agent-output.md`、`agent.log`、`agent-status.txt`
-2. 执行 `$SKILL_DIR/scripts/run_agent.sh codex test-task .agent-loop/test-task/peer-task.md peer <repo>`，确认产生 `peer-output.md`、`peer.log`，且 `agent-output.md` 未被覆盖
-3. 执行 `$SKILL_DIR/scripts/run_agent.sh claude test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
-4. 执行 `$SKILL_DIR/scripts/run_agent.sh crush test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
-5. 执行 `$SKILL_DIR/scripts/run_agent.sh opencode test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
+1. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh codex test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认产生 `agent-output.md`、`agent.log`、`agent-status.txt`
+2. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh codex test-task .agent-loop/test-task/peer-task.md peer <repo>`，确认产生 `peer-output.md`、`peer.log`，且 `agent-output.md` 未被覆盖
+3. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh claude test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
+4. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh crush test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
+5. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
 6. 对 crush/opencode 分别执行 peer 角色（`role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖 agent 产物
 7. 确认多个 task-name 并行不冲突
 
