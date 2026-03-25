@@ -72,6 +72,8 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
 fi
 
 run_codex() {
+  # 预清空输出文件，与 claude/crush/opencode 的 > 重定向行为对称
+  : > "$OUTPUT_FILE"
   (
     cd "$WORKDIR"
     codex exec \

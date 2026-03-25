@@ -43,7 +43,7 @@ metadata:
 5. **轮询等待 agent 完成**：agent 执行耗时因任务复杂度差异很大（数秒到数分钟均属正常），controller 需要耐心等待，通过定时轮询 `*-status.txt` 判断是否完成：
    - 轮询间隔：每 **30 秒** 检查一次 `agent-status.txt`（或 `peer-status.txt`）
    - 超时上限：**10 分钟**；超时后视为 error，记录日志并升级给用户
-   - 判断逻辑：文件内容为 `done` → 成功完成；`error` → 失败；空或不存在 → 仍在运行
+   - 判断逻辑：文件内容为 `done` → 成功完成；`error` → 失败；空 → 仍在运行。正常流程中 status 文件在参数校验通过后立即创建（空文件），因此"文件不存在"不是合法的运行中状态——它意味着参数校验失败（controller 编程错误），controller 应检查调用参数而非继续轮询
    - 轮询期间 controller 不应做其他裁决动作，避免读到不完整的输出
    - **禁止使用 `agent.log` / `peer.log` 推断运行状态**：不得通过 `wc -c`、`ls -la`、`tail` 等任何方式读取或探测 log 文件来判断 agent 是否仍在运行。唯一的状态判断来源是 `*-status.txt`。status 为空说明 agent 仍在运行，继续等待即可
 6. **只读取结构化文件**：
@@ -123,7 +123,7 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 - 不得宣称"agent 原生互调"；准确表述为"controller 通过 CLI 子进程启动 agent"
 - controller 裁决时必须独立判断严重度，不得直接采信 agent 标注。已知退化模式：后期轮次 agent 将 Minor 膨胀为 Major、将"修复未传播"包装为新发现
 - 结构化输出文件必须与原始日志文件分离
-- `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断。注意：若 `run_agent.sh` 在参数校验阶段（参数不足、workdir 不存在、role 非法）就退出，status 文件不会被创建——controller 应确保调用参数正确，这些是 controller 编程错误而非运行时失败
+- `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断。注意：若 `run_agent.sh` 在参数校验阶段（参数不足、workdir 不存在、task-name 非法、role 非法）就退出，status 文件不会被创建——controller 应确保调用参数正确，这些是 controller 编程错误而非运行时失败
 - `run_agent.sh` 首次运行时自动将 `.agent-loop/` 加入 `.git/info/exclude`，避免协议文件污染 agent 的仓库视图
 
 # 验证方式
@@ -135,8 +135,9 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 3. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh claude test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
 4. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh crush test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
 5. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
-6. 对 crush/opencode 分别执行 peer 角色（`role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖 agent 产物
+6. 对 claude/crush/opencode 分别执行 peer 角色（`role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖 agent 产物
 7. 确认多个 task-name 并行不冲突
+8. 确认首次运行后 `.agent-loop/` 已被写入 `<repo>/.git/info/exclude`
 
 # 已知平台问题
 
