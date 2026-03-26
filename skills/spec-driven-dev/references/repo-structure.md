@@ -33,16 +33,24 @@ apps/my-app/                    ← workspace
       UserService.ts
       UserService.test.ts       ← UNIT + PROPERTY，colocate
   tests/
-    contract/                   ← CONTRACT，子目录镜像 src/
-    integration/                ← INTEGRATION，子目录镜像 src/
+    contract/                        ← CONTRACT，子目录镜像 src/
+      services/
+        UserService.contract.test.ts
+    integration/                     ← INTEGRATION，子目录镜像 src/
+      services/
+        UserService.integration.test.ts
 
 libs/my-lib/                    ← 另一个 workspace
   src/
     AuthToken.ts
     AuthToken.test.ts           ← UNIT + PROPERTY，colocate
   tests/
-    contract/
-    integration/
+    contract/                        ← CONTRACT，子目录镜像 src/
+      services/
+        AuthToken.contract.test.ts
+    integration/                     ← INTEGRATION，子目录镜像 src/
+      services/
+        AuthToken.integration.test.ts
 ```
 
 ## 归属原则
@@ -51,11 +59,11 @@ libs/my-lib/                    ← 另一个 workspace
 
 ## 测试文件位置规则
 
-| 类型 | 位置 |
-|------|------|
-| UNIT / PROPERTY | colocate，紧邻被测文件（`src/` 内） |
-| CONTRACT | `tests/contract/`，子目录镜像 `src/` |
-| INTEGRATION | `tests/integration/`，子目录镜像 `src/` |
+| 类型            | 位置                                    |
+| --------------- | --------------------------------------- |
+| UNIT / PROPERTY | colocate，紧邻被测文件（`src/` 内）     |
+| CONTRACT        | `tests/contract/`，子目录镜像 `src/`    |
+| INTEGRATION     | `tests/integration/`，子目录镜像 `src/` |
 
 ## 测试优先级
 
