@@ -39,10 +39,13 @@ metadata:
 收到开发需求时，判断两个维度：
 
 **1. 模式**：是否指定 `--auto`？
+
 - 指定 → **Auto 模式**（全自动，AI 裁决，流程结束输出 Decision Report）
 - 未指定 → **标准模式**（需人工审查）
+- **中途切换**：标准模式执行中用户可随时指定 `--auto` 切换为 Auto 模式，从当前步骤开始自动推进（见下方"中途切换 Auto 模式"）
 
 **2. 规模**：Epic 还是单模块？
+
 - 需求跨多个模块、有明确模块间依赖 → **Epic**，必须先走 Plan
 - 需求范围清晰、单模块可承载 → **直接走 Spec 层**
 
@@ -119,6 +122,27 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 
 ---
 
+## 中途切换 Auto 模式
+
+标准模式执行中，用户可随时指定 `--auto` 切换为 Auto 模式。
+
+切换规则：
+
+- **已完成的步骤保留**：人工已审查的 Spec/Scenario 不需要重新走 AI 审查
+- **当前步骤起切换**：从用户指定 `--auto` 时的下一个未完成步骤开始，按 Auto 模式规则执行
+- **Decision Log 从切换点开始记录**：切换前的人工审查不纳入 Decision Log
+- **Decision Report 标注切换点**：报告开头注明"从步骤 N 起切换为 Auto 模式"，以及切换前已由人工完成的步骤清单
+
+示例：
+
+```
+用户：Spec 我已经审查通过了，后面 --auto 帮我走完
+→ 从步骤 4（Scenario 生成）开始自动执行
+→ 步骤 1-3 标记为"人工已完成"，步骤 4-13 按 Auto 模式规则执行
+```
+
+---
+
 ## 迭代修正机制
 
 任何阶段发现问题，允许回退上一步。详细回退规则见 `references/iteration-rules.md`。
@@ -126,11 +150,13 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 **关键原则**：
 
 **标准模式**：
+
 - Spec 和 Scenario 是人审查的，发现问题必须回退到人审查环节
 - Plan 是模块边界和契约的唯一真理源，不允许在 Spec 层悄悄扩展边界
 - 不允许 AI 自行修改 Spec、Scenario 或 Plan 的语义
 
 **Auto 模式例外**：
+
 - AI 可在裁决权限范围内修改 Spec/Scenario/Plan，但每次必须记录 Decision Log（含变更前后对照）
 - 超出裁决权限的修改仍必须升级给用户
 
@@ -139,9 +165,14 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 本文档中所有"跨 agent 审查"均指：**使用 `multi-agent-loop` skill 启动一个独立的审查进程**。优先选择与当前 coding agent 不同的 agent（如当前是 Claude 则启动 Codex/OpenCode），以获得独立视角。若环境中不存在其他可用的 coding agent，允许使用同一 agent 但必须通过 `multi-agent-loop` 启动独立进程，确保审查上下文与执行上下文隔离。
 
 执行要点：
+
 - **优先异构**：审查 agent 优先选择与当前执行 agent 不同的 agent；无可用异构 agent 时，使用同一 agent 的独立进程
 - **controller 裁决**：审查 agent 只输出结构化发现，controller（当前 agent）逐条裁决，不盲信
-- **有界循环**：遵循 `multi-agent-loop` 的循环与终止规则
+- **有界循环**：每次审查必须遵循 `multi-agent-loop` 的完整循环规则：
+  - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
+  - **继续条件**：经 controller 重新评估后，本轮存在至少一条被裁决为 Major 及以上的发现（无论是否已修复）→ 修复后**必须**启动下一轮，由新 agent 独立审查当前状态。**禁止以任何理由跳过验证轮**——包括但不限于"修复很简单"、"只是文档补充"、"不存在引入新问题的风险"、"可直接确认正确性"。这些都是 rationalization，不构成跳过验证的合法依据。
+  - **暂停条件**：本轮存在无法判断的点 → 升级给用户裁决。用户裁决完成后，controller 根据继续/终止条件决定是否启动下一轮。
+  - **终止条件**（满足任一即停止）：达到最大 3 轮；或经 controller 重新评估后，本轮无 Major 及以上级别的发现（即使 agent 标注了 Major，controller 判定实质为 Minor 则视为无 Major）。**注意**：若本轮存在被裁决为真 Major 的发现并已修复，仍属"本轮有 Major"，必须走继续条件启动下一轮验证，不得视为终止。
 
 ---
 
@@ -177,20 +208,20 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 
 按需加载，不需要一次性阅读：
 
-| 文档 | 何时读取 |
-|------|---------|
-| [references/workflow-standard.md](./references/workflow-standard.md) | 执行标准模式各步骤时 |
-| [references/workflow-auto.md](./references/workflow-auto.md) | 执行 Auto 模式时（裁决规则、Decision Log/Report 格式） |
-| [references/workflow-epic.md](./references/workflow-epic.md) | 处理 Epic 需求时（Plan 格式、Review 检查点） |
-| [references/complexity-guide.md](./references/complexity-guide.md) | 判断复杂度和审查深度时 |
-| [references/iteration-rules.md](./references/iteration-rules.md) | 任何阶段发现问题需要回退时 |
-| [references/scenario-format.md](./references/scenario-format.md) | 生成或审查 Scenario 时 |
-| [references/testing-guide.md](./references/testing-guide.md) | 决定测什么/不测什么时 |
-| [references/repo-structure.md](./references/repo-structure.md) | 创建测试文件或新模块时 |
-| [references/prompt-spec-review.md](./references/prompt-spec-review.md) | 跨 agent 审查 Spec 时 |
-| [references/prompt-scenario-generation.md](./references/prompt-scenario-generation.md) | 生成 Scenario 时 |
-| [references/prompt-scenario-review.md](./references/prompt-scenario-review.md) | 跨 agent 审查 Scenario 时 |
-| [references/prompt-test-review.md](./references/prompt-test-review.md) | 跨 agent 审查 Test 时 |
-| [references/prompt-test-implementation.md](./references/prompt-test-implementation.md) | 实现测试时 |
-| [references/prompt-feature-implementation.md](./references/prompt-feature-implementation.md) | 实现功能时 |
-| [references/prompt-test-expansion.md](./references/prompt-test-expansion.md) | 需要补充测试场景时（备用） |
+| 文档                                                                                         | 何时读取                                               |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [references/workflow-standard.md](./references/workflow-standard.md)                         | 执行标准模式各步骤时                                   |
+| [references/workflow-auto.md](./references/workflow-auto.md)                                 | 执行 Auto 模式时（裁决规则、Decision Log/Report 格式） |
+| [references/workflow-epic.md](./references/workflow-epic.md)                                 | 处理 Epic 需求时（Plan 格式、Review 检查点）           |
+| [references/complexity-guide.md](./references/complexity-guide.md)                           | 判断复杂度和审查深度时                                 |
+| [references/iteration-rules.md](./references/iteration-rules.md)                             | 任何阶段发现问题需要回退时                             |
+| [references/scenario-format.md](./references/scenario-format.md)                             | 生成或审查 Scenario 时                                 |
+| [references/testing-guide.md](./references/testing-guide.md)                                 | 决定测什么/不测什么时                                  |
+| [references/repo-structure.md](./references/repo-structure.md)                               | 创建测试文件或新模块时                                 |
+| [references/prompt-spec-review.md](./references/prompt-spec-review.md)                       | 跨 agent 审查 Spec 时                                  |
+| [references/prompt-scenario-generation.md](./references/prompt-scenario-generation.md)       | 生成 Scenario 时                                       |
+| [references/prompt-scenario-review.md](./references/prompt-scenario-review.md)               | 跨 agent 审查 Scenario 时                              |
+| [references/prompt-test-review.md](./references/prompt-test-review.md)                       | 跨 agent 审查 Test 时                                  |
+| [references/prompt-test-implementation.md](./references/prompt-test-implementation.md)       | 实现测试时                                             |
+| [references/prompt-feature-implementation.md](./references/prompt-feature-implementation.md) | 实现功能时                                             |
+| [references/prompt-test-expansion.md](./references/prompt-test-expansion.md)                 | 需要补充测试场景时（备用）                             |
