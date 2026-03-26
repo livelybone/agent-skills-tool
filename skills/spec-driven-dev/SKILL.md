@@ -85,7 +85,9 @@ Plan（模块拆解 + 依赖图 + 契约）→ 详见 references/workflow-epic.m
 
 Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替换为 AI 跨 agent 审查 + AI 裁决。
 
-**禁止中断**：除裁决升级条件外，不得以任何理由暂停流程。详细规则见 `references/workflow-auto.md`。
+**禁止中断**：除裁决升级条件外，不得以任何理由暂停流程。
+**禁止简化审查**：每个模块的每个审查步骤必须完整执行跨 agent 审查，不得因"改动小"、"上下文长"等理由降级。
+详细规则见 `references/workflow-auto.md`。
 
 ### Spec 层流程（每个模块）
 
