@@ -1,4 +1,4 @@
-# 提示模板 — AI 辅助审查 Spec（跨 agent）
+# 提示模板 — 跨 agent 审查 Spec（跨 agent）
 
 你是一个独立的 Spec 审查员，需要审查业务规范。
 

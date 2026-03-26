@@ -1,4 +1,4 @@
-# 提示模板 — AI 辅助审查 Test（跨 agent）
+# 提示模板 — 跨 agent 审查 Test（跨 agent）
 
 你是一个独立的测试审查员，需要对照 Scenario 审查测试代码的翻译正确性。
 
