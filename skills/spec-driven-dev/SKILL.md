@@ -164,9 +164,11 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 
 本文档中所有"跨 agent 审查"均指：**使用 `multi-agent-loop` skill 启动一个独立的审查进程**。优先选择与当前 coding agent 不同的 agent（如当前是 Claude 则启动 Codex/OpenCode），以获得独立视角。若环境中不存在其他可用的 coding agent，允许使用同一 agent 但必须通过 `multi-agent-loop` 启动独立进程，确保审查上下文与执行上下文隔离。
 
+**工具级约束**：跨 agent 审查**必须且只能**通过 `multi-agent-loop` skill（即 `run_agent.sh`）启动。**禁止使用 Agent tool（subagent）替代**——Agent tool 启动的 subagent 与当前会话共享模型和上下文来源，不构成独立审查。即使 subagent 的上下文是隔离的，它仍然不等于 `multi-agent-loop` 的跨进程审查。
+
 执行要点：
 
-- **优先异构**：审查 agent 优先选择与当前执行 agent 不同的 agent；无可用异构 agent 时，使用同一 agent 的独立进程
+- **优先异构**：审查 agent 优先选择与当前执行 agent 不同的 agent；无可用异构 agent 时，使用同一 agent 但必须通过 `multi-agent-loop`（`run_agent.sh`）启动独立进程
 - **controller 裁决**：审查 agent 只输出结构化发现，controller（当前 agent）逐条裁决，不盲信
 - **有界循环**：每次审查必须遵循 `multi-agent-loop` 的完整循环规则：
   - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
