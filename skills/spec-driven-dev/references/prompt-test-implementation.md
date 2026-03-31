@@ -2,105 +2,15 @@
 
 基于批准的场景实现自动化测试。
 
-## 测试文件命名与放置规则
+## 前置引用
 
-### 目录结构
-
-**前置步骤：先判断项目类型，再选择对应的目录结构。**
-
----
-
-#### 单包项目（non-monorepo）
-
-| 类型 | 放置位置 |
-|------|---------|
-| UNIT / PROPERTY | colocate，紧邻被测文件 |
-| CONTRACT | `tests/contract/`，子目录镜像 `src/` |
-| INTEGRATION | `tests/integration/`，子目录镜像 `src/` |
-
-```
-src/
-  services/
-    UserService.ts
-    UserService.test.ts          ← UNIT / PROPERTY
-tests/
-  contract/
-    services/UserService.test.ts ← CONTRACT
-  integration/
-    services/UserService.test.ts ← INTEGRATION
-```
-
----
-
-#### Monorepo
-
-测试必须放在**被测代码所属的 workspace 内**，不得跨 workspace 聚合到仓库根目录。每个 workspace 内部结构与单包项目相同。
-
-**跨 workspace 的契约测试**：放在**消费方 workspace** 的 `tests/contract/`，由消费方负责验证上游是否满足自己的期望。上游变更时消费方测试报错，责任归属清晰。
-
-```
-apps/mobile/
-  tests/
-    contract/
-      AuthToken.test.ts  ← mobile 验证 libs/services 的 AuthToken 契约
-```
-
-| 类型 | 放置位置 |
-|------|---------|
-| UNIT / PROPERTY | workspace 内 colocate，紧邻被测文件 |
-| CONTRACT | workspace 内 `tests/contract/`，子目录镜像 `src/` |
-| INTEGRATION | workspace 内 `tests/integration/`，子目录镜像 `src/` |
-
-```
-apps/mobile/                         ← workspace
-  src/
-    services/
-      UserService.ts
-      UserService.test.ts            ← UNIT / PROPERTY
-  tests/
-    contract/
-      services/UserService.test.ts   ← CONTRACT
-    integration/
-      services/UserService.test.ts   ← INTEGRATION
-
-libs/services/                       ← 另一个 workspace，结构相同
-  src/
-    AuthToken.ts
-    AuthToken.test.ts
-  tests/
-    contract/
-      AuthToken.test.ts
-```
-
----
-
-**写完测试后，必须执行以下自检：**
-
-```
-1. [monorepo] 测试文件是否在被测代码所属的 workspace 内？（不在则移动）
-2. 文件里所有 test case 的类型是否一致？（混合则拆分）
-3. 文件路径是否与测试类型匹配？（CONTRACT 在 tests/contract/，UNIT/PROPERTY 在 src/ 旁）
-```
-
-### 文件命名规则
-
-**测试文件名必须与被测文件名保持一致，只在扩展名前加 `.test` 或 `.spec`。**
-
-**前置步骤：在写测试前，先检查项目里已有的测试文件命名模式（`.test.ts` 还是 `.spec.ts`，目录结构如何组织），与现有模式保持一致。**
-
-`__tests__/` 目录仅用于存放测试辅助工具（helpers、fixtures、mocks、test utilities），不存放测试文件本身。
-
-禁止：
-- ❌ [monorepo] 将测试放到仓库根 `tests/` 目录（应放在各自 workspace 内）
-- ❌ 将 UNIT / PROPERTY 测试放到 `tests/` 或 `__tests__/` 目录（应 colocate 在 `src/` 中）
-- ❌ 将 CONTRACT / INTEGRATION 测试放到 `src/` 中（应放到 `tests/` 目录）
-- ❌ 用模块名或功能名随意命名（如 `cloud-gateway.test.ts` 对应 `CloudGatewayService.ts`）
-- ❌ 驼峰/kebab-case 混用（被测文件是 `UserService.ts`，测试文件不能叫 `user-service.test.ts`）
-- ❌ 将不同测试类型混写在同一个测试文件中
-- ❌ 不确定命名规范时自行发明，必须先检查现有测试文件的命名模式
+- **测试文件位置和命名**：见 `repo-structure.md`
+- **测试类型优先级**：见 `scenario-format.md` > 测试类型标记
+- **测什么/不测什么**：见 `testing-guide.md`
 
 ## 要求
 
+- **按场景的测试类型标记（CONTRACT / INTEGRATION / PROPERTY / UNIT）决定测试类型**，不自行判断
 - 优先行为级别测试
 - 优先工作流的集成测试
 - 当 API 模式稳定性重要时添加契约测试
@@ -108,16 +18,44 @@ libs/services/                       ← 另一个 workspace，结构相同
 - 不要修改场景含义
 - 不要削弱现有测试
 
-## 测试类型优先级
-
-**contract > integration > property > unit**
-
 ## 测试原则
 
 - 测试行为而非内部实现
 - 避免与私有辅助函数绑定的脆弱测试
 - 确保测试能验证场景中描述的行为
 - 保持测试简洁、可读、可维护
+
+### 断言行为契约，不断言实现路径
+
+测试应该断言**输入 → 输出/副作用**（行为契约），不应该断言中间状态存放在哪个字段、经过哪条代码路径。
+
+判断标准：**如果一次纯内部重构（不改变外部行为）导致大量测试失败，说明测试耦合了实现。**
+
+**反模式：断言内部状态存放位置**
+
+```ts
+// ❌ 测的是"错误被写到了 store 的 sessionError 字段"——实现细节
+await login(badCredentials);
+expect(getState().sessionError?.code).toBe('INVALID_CREDENTIALS');
+
+// ✅ 测的是行为契约——输入错误凭证，登录失败并返回正确错误码
+await expect(login(badCredentials)).rejects.toThrow('INVALID_CREDENTIALS');
+```
+
+**反模式：直接塞 mock 状态来验证 UI**
+
+```ts
+// ❌ 锁死了"error 从 store 来"的实现路径
+mockStore.setState({ sessionError: { code: 'INVALID_CODE' } });
+expect(screen.getByText('验证码错误')).toBeVisible();
+
+// ✅ 模拟用户行为 → 验证 UI 结果
+await user.type(codeInput, '000000');
+await user.click(submitButton);
+expect(screen.getByText('验证码错误')).toBeVisible();
+```
+
+**写测试前问自己**：这个断言在纯内部重构后还会通过吗？如果把数据存储位置从 A 挪到 B（行为不变），这个测试会挂吗？如果会挂 → 测试耦合了实现，需要重写断言。
 
 ## 前置步骤：建立 Implementation Stub
 

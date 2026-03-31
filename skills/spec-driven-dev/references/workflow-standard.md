@@ -64,7 +64,7 @@
 
 ## 步骤 2 — 生成测试场景
 
-主 agent 读取 Spec 并生成人类可读的行为场景。格式详见 scenario-format.md。
+主 agent 读取 Spec 并生成人类可读的行为场景。格式详见 `scenario-format.md`，生成提示词参考 `prompt-scenario-generation.md`。
 
 ---
 
@@ -103,7 +103,7 @@
 
 ## 步骤 4 — 实现测试
 
-AI 将批准的场景转换为自动化测试。
+AI 将批准的场景转换为自动化测试。详细实现指南见 `prompt-test-implementation.md`，测试策略（测什么/不测什么）见 `testing-guide.md`，测试文件位置见 `repo-structure.md`。
 
 **前置：建立 Implementation Stub**
 

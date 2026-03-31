@@ -130,6 +130,7 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 
 - **已完成的步骤保留**：人工已审查的 Spec/Scenario 不需要重新走 AI 审查
 - **当前步骤起切换**：从用户指定 `--auto` 时的下一个未完成步骤开始，按 Auto 模式规则执行
+- **部分完成的步骤**：如果当前步骤已产出产物但未审查（如 Scenario 已生成但未审查），从该步骤的审查环节开始按 Auto 模式执行；如果当前步骤进行到一半（如测试写了一部分），从该步骤的开头重新执行
 - **Decision Log 从切换点开始记录**：切换前的人工审查不纳入 Decision Log
 - **Decision Report 标注切换点**：报告开头注明"从步骤 N 起切换为 Auto 模式"，以及切换前已由人工完成的步骤清单
 
@@ -139,6 +140,10 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 用户：Spec 我已经审查通过了，后面 --auto 帮我走完
 → 从步骤 4（Scenario 生成）开始自动执行
 → 步骤 1-3 标记为"人工已完成"，步骤 4-13 按 Auto 模式规则执行
+
+用户：Scenario 生成好了但我没时间审了，--auto
+→ 从步骤 5（跨 agent 审查 Scenario）开始自动执行
+→ 步骤 1-3 标记为"人工已完成"，步骤 4 标记为"产物已生成"
 ```
 
 ---
@@ -193,10 +198,12 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 
 - ✅ Plan Review 已完成（Epic 时适用）
 - ✅ Spec 存在或已更新
+- ✅ Spec 审查已完成（标准模式：人工审查；Auto 模式：跨 agent 审查）
 - ✅ 场景已生成并审查
 - ✅ 测试已实现（通过验证由 CI 负责）
 - ✅ 跨 agent 审查 Test 已完成（标准模式按复杂度可选；Auto 模式强制）
-- ✅ Red Run 通过（全部红色）
+- ✅ Red Run 通过（当前 Spec 范围内测试全部红色）
+- ✅ Baseline Test Run 已记录
 - ✅ 所有功能域已实现（不存在 stub）
 - ✅ Spec 完整性矩阵已输出
 - ✅ CI 验证通过（含 baseline 对比）
