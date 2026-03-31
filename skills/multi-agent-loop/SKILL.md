@@ -15,8 +15,9 @@ metadata:
 # 核心概念
 
 - **controller**：发起循环、读取 agent 结论、逐条裁决的角色（通常是当前会话里的 Claude Code）。不执行任务本身，只指挥和裁决。
-- **agent（主）**：被 controller 拉起、执行具体任务、把结构化发现写入 `agent-output.md` 的子进程。只报告观察到的事实和无法判断的点，不做裁决。
-- **peer（副，可选）**：读取主 agent 的 `agent-output.md`，对其中的发现提出独立意见（支持、质疑或补充），写入 `peer-output.md`。peer 同样只输出观点，不做裁决。
+- **agent（主）**：被 controller 拉起、执行具体任务、把结构化发现写入 `agent-output.md` 的子进程。覆盖所有任务类型——review、discussion、implementation、verification、refactoring 均由 agent 角色承担。只报告观察到的事实和无法判断的点，不做裁决。
+- **peer（副，可选）**：在 agent 已产出 `agent-output.md` 的前提下，读取该产出并提出独立意见（支持、质疑或补充），写入 `peer-output.md`。peer 是对 agent 结论的第二视角挑战，不是独立执行任务的角色。peer 同样只输出观点，不做裁决。
+- **角色选择原则**：需要执行一项任务（含审查）→ 用 agent；需要挑战 agent 已有结论 → 用 peer。审查已有产物（如 review Spec、review Test）属于"执行审查任务"，应使用 agent 角色而非 peer。
 - **关键澄清**：这里的"agent 调用 agent"是通过 CLI 子进程 + 文件协议完成的，不是模型内部原生互调。`claude -p` 与 `codex exec` 均作为独立子进程运行，输出不会污染 controller 的上下文。
 
 # 必须材料
