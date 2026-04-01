@@ -24,6 +24,7 @@ import urllib.request
 import urllib.error
 import json
 from pathlib import Path
+from typing import Optional
 
 SUPPORTED_FORMATS = {".avif", ".webp", ".jpg", ".jpeg", ".png"}
 SUPPORTED_CONVERT_FORMATS = {"avif", "webp", "jpeg", "png"}
@@ -99,7 +100,7 @@ def compress_image(source: str, api_key: str) -> tuple[str, int]:
 def download_output(
     output_url: str,
     api_key: str,
-    convert_format: str | None = None,
+    convert_format: Optional[str] = None,
     with_background: bool = False,
 ) -> bytes:
     """Download compressed image, optionally converting format."""
@@ -145,7 +146,11 @@ def download_output(
         sys.exit(1)
 
 
-def resolve_output_path(input_path: str, output_arg: str | None, convert_format: str | None) -> str:
+def resolve_output_path(
+    input_path: str,
+    output_arg: Optional[str],
+    convert_format: Optional[str],
+) -> str:
     """Determine output file path."""
     if output_arg:
         return output_arg
@@ -172,7 +177,11 @@ def resolve_output_path(input_path: str, output_arg: str | None, convert_format:
     return str(p.parent / f"{p.stem}_compressed{ext}")
 
 
-def needs_background_fill(input_path: str, convert_format: str | None, is_url: bool) -> bool:
+def needs_background_fill(
+    input_path: str,
+    convert_format: Optional[str],
+    is_url: bool,
+) -> bool:
     """Return True when converting a potentially-transparent format to JPEG."""
     if convert_format != "jpeg":
         return False
