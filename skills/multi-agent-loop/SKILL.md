@@ -24,12 +24,14 @@ metadata:
 
 - 当前环境至少安装一个可无头执行的 agent CLI：`codex`、`claude`、`crush` 或 `opencode`
 - `$SKILL_DIR/scripts/run_agent.sh`（`$SKILL_DIR` 指本 skill 的安装目录，即包含此 `SKILL.md` 的目录）
-- 每个任务有唯一的任务名（task-name），用于隔离工作目录
+- 每一轮执行都必须有唯一的任务名（task-name），用于隔离工作目录；禁止把不同轮次复用到同一个 task-name
 
 # 执行步骤
 
 1. **确认拓扑**：明确谁是 controller，谁是 agent，是否需要 peer。
-2. **选定任务名**：每个任务使用唯一的 `<task-name>`，工作目录为 `$WORKDIR/.agent-loop/<task-name>/`，多任务并行不冲突。
+2. **选定任务名**：每一轮执行都使用唯一的 `<task-name>`，工作目录为 `$WORKDIR/.agent-loop/<task-name>/`，多任务并行不冲突。
+   - 推荐命名：`<step>-<module>-r1`、`<step>-<module>-r2`、`<step>-<module>-r3`
+   - 禁止复用如 `review-spec-payment` 这样的固定 task-name 跑多轮；否则后续轮次会覆盖前一轮的 `agent-output.md` / `peer-output.md`
 3. **写入本轮任务**：controller 将任务描述写入 `$WORKDIR/.agent-loop/<task-name>/agent-task.md`，参考 `templates/agent-prompt.txt`，要求 agent 只输出结构化发现，不输出推理过程或完整日志。
 4. **启动 agent**：`run_agent.sh` 本身是同步阻塞的，controller 需要以后台方式调用（如 `run_in_background`、`&`）来实现非阻塞。
    - **命令格式约束**：构造 Bash 命令时，必须先将 `$SKILL_DIR` 解析为绝对路径字符串，然后在命令中直接使用该绝对路径字面量。**禁止**在 Bash 命令中使用 `$SKILL_DIR` 变量引用（如 `$SKILL_DIR/scripts/...`）或内联赋值（如 `SKILL_DIR="..." $SKILL_DIR/scripts/...`）。这确保命令格式一致，便于权限规则匹配。
@@ -117,13 +119,14 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 # 质量门槛
 
 - 必须区分 `controller` 与 `agent`，controller 不执行任务，只裁决
-- 必须使用唯一 task-name，禁止多任务共用同一工作目录
+- 必须使用唯一 task-name，禁止多任务或多轮次共用同一工作目录
 - controller 只通过文件读取 agent 输出，不内联读取任何子进程的 stdout/stderr；runner 负责把 agent 输出落盘（codex 用 `-o`，claude/crush/opencode 用 stdout 重定向），所有机制均符合此约束
 - 必须限制循环轮数，禁止无界自反馈
 - 升级条件必须明确：架构取舍、权限边界、安全风险
 - 不得宣称"agent 原生互调"；准确表述为"controller 通过 CLI 子进程启动 agent"
 - controller 裁决时必须独立判断严重度，不得直接采信 agent 标注。已知退化模式：后期轮次 agent 将 Minor 膨胀为 Major、将"修复未传播"包装为新发现
 - 结构化输出文件必须与原始日志文件分离
+- `run_agent.sh` 会拒绝复用已存在同角色产物的 task-name；controller 看到该错误时，应新建下一轮目录而不是重试覆盖
 - `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断。注意：若 `run_agent.sh` 在参数校验阶段（参数不足、workdir 不存在、task-name 非法、role 非法）就退出，status 文件不会被创建——controller 应确保调用参数正确，这些是 controller 编程错误而非运行时失败
 - `run_agent.sh` 首次运行时自动将 `.agent-loop/` 加入 `.git/info/exclude`，避免协议文件污染 agent 的仓库视图
 

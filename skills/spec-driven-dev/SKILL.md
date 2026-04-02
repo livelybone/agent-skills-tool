@@ -175,6 +175,7 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 
 - **优先异构**：审查 agent 优先选择与当前执行 agent 不同的 agent；无可用异构 agent 时，使用同一 agent 但必须通过 `multi-agent-loop`（`run_agent.sh`）启动独立进程
 - **使用 agent 角色**：跨 agent 审查是"执行审查任务"，必须使用 `multi-agent-loop` 的 **agent 角色**（非 peer）。peer 角色仅在需要挑战 agent 已有结论时使用。任务文件必须命名为 `agent-task.md`（遵循 `multi-agent-loop` 文件协议），不得使用自定义文件名
+- **轮次隔离**：每一轮审查都必须使用新的 `task-name`，不得复用上一轮目录。推荐命名为 `<step>-<module>-r1`、`<step>-<module>-r2`、`<step>-<module>-r3`
 - **controller 裁决**：审查 agent 只输出结构化发现，controller（当前 agent）逐条裁决，不盲信
 - **有界循环**：每次审查必须遵循 `multi-agent-loop` 的完整循环规则：
   - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。

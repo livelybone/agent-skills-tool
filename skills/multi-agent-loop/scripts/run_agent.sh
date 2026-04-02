@@ -53,6 +53,13 @@ case "$ROLE" in
 esac
 
 mkdir -p "$TASK_DIR"
+
+# 同一 task-name + role 只允许执行一次，避免后续轮次静默覆盖前一轮产物。
+if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" || -e "$STATUS_FILE" ]]; then
+  echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+  exit 2
+fi
+
 : > "$STATUS_FILE"
 
 # 自动把 .agent-loop/ 加入本地 git exclude，避免污染 git status
