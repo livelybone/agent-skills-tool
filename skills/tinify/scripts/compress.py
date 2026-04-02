@@ -4,15 +4,16 @@
 Supported formats: AVIF, WebP, JPEG, PNG
 
 Usage:
+    compress.py <input> [<output>]
+    compress.py <input> [<output>] --format <fmt>
     compress.py <input> [<output>] --api-key <key>
-    compress.py <input> [<output>] --api-key <key> --format <fmt>
 
 Arguments:
     input       Path to image file or URL
     output      Output file path (default: <input>_compressed.<ext>)
 
 Options:
-    --api-key   Tinify API key (or set TINIFY_API_KEY env var)
+    --api-key   Tinify API key (compatibility fallback only)
     --format    Convert to format: avif, webp, jpeg, png (optional)
 """
 
@@ -23,6 +24,7 @@ import sys
 import urllib.request
 import urllib.error
 import json
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +34,79 @@ SUPPORTED_CONVERT_FORMATS = {"avif", "webp", "jpeg", "png"}
 POTENTIALLY_TRANSPARENT = {".png", ".webp", ".avif"}
 API_BASE = "https://api.tinify.com"
 REQUEST_TIMEOUT = 30  # seconds
+API_KEY_ENV_NAME = "TINIFY_API_KEY"
+API_KEY_CONFIG_PATH = Path.home() / ".config" / "tinify" / "token"
+
+
+def find_project_root() -> Path:
+    """Return git root when available, otherwise the current working directory."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return Path.cwd()
+
+    if result.returncode != 0:
+        return Path.cwd()
+
+    git_root = result.stdout.strip()
+    return Path(git_root) if git_root else Path.cwd()
+
+
+def read_env_file_value(env_file: Path, key: str) -> Optional[str]:
+    """Read a simple KEY=value entry from an env file."""
+    if not env_file.is_file():
+        return None
+
+    try:
+        with env_file.open("r", encoding="utf-8") as file:
+            for line in file:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                env_key, env_value = stripped.split("=", 1)
+                if env_key != key:
+                    continue
+                return env_value.strip().strip('"').strip("'")
+    except OSError:
+        return None
+
+    return None
+
+
+def read_token_file(token_file: Path) -> Optional[str]:
+    """Read a token from a dedicated config file."""
+    if not token_file.is_file():
+        return None
+
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+    return token or None
+
+
+def resolve_api_key(cli_api_key: Optional[str]) -> Optional[str]:
+    """Resolve Tinify API key using figma-export-compatible precedence."""
+    api_key = os.environ.get(API_KEY_ENV_NAME)
+    if api_key:
+        return api_key
+
+    project_root = find_project_root()
+    api_key = read_env_file_value(project_root / ".env", API_KEY_ENV_NAME)
+    if api_key:
+        return api_key
+
+    api_key = read_token_file(API_KEY_CONFIG_PATH)
+    if api_key:
+        return api_key
+
+    return cli_api_key
 
 
 def build_auth_header(api_key: str) -> str:
@@ -195,7 +270,7 @@ def main():
     parser = argparse.ArgumentParser(description="Compress images via Tinify API")
     parser.add_argument("input", help="Image file path or URL")
     parser.add_argument("output", nargs="?", help="Output file path")
-    parser.add_argument("--api-key", help="Tinify API key (or TINIFY_API_KEY env var)")
+    parser.add_argument("--api-key", help="Tinify API key (compatibility fallback only)")
     parser.add_argument(
         "--format",
         choices=sorted(SUPPORTED_CONVERT_FORMATS),
@@ -203,9 +278,13 @@ def main():
     )
     args = parser.parse_args()
 
-    api_key = args.api_key or os.environ.get("TINIFY_API_KEY")
+    api_key = resolve_api_key(args.api_key)
     if not api_key:
-        print("Error: provide --api-key or set TINIFY_API_KEY env var", file=sys.stderr)
+        print(
+            "Error: TINIFY_API_KEY not found. Set env var, add to project .env, "
+            "or save to ~/.config/tinify/token",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     is_url = args.input.startswith("http://") or args.input.startswith("https://")

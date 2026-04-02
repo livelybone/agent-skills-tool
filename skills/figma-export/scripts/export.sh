@@ -364,6 +364,9 @@ if [[ -n "$TINIFY_SKILL_DIR" ]] && [[ -f "$TINIFY_SKILL_DIR/scripts/compress.py"
       TINIFY_KEY=$(grep -E "^TINIFY_API_KEY=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
     fi
   fi
+  if [[ -z "$TINIFY_KEY" ]] && [[ -f "$HOME/.config/tinify/token" ]]; then
+    TINIFY_KEY=$(tr -d '[:space:]' < "$HOME/.config/tinify/token" 2>/dev/null)
+  fi
 
   if [[ -n "$TINIFY_KEY" ]]; then
     export TINIFY_API_KEY="$TINIFY_KEY"

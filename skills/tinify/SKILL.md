@@ -9,7 +9,11 @@ Compress images via the [Tinify API](https://api.tinify.com) (TinyPNG/TinyJPG). 
 
 ## Prerequisites
 
-- API key: set `TINIFY_API_KEY` in workspace `.env`, or as env var, or pass `--api-key`
+- API key: script resolves `TINIFY_API_KEY` in this order:
+  1. shell environment variable `TINIFY_API_KEY`
+  2. project `.env` at git root
+  3. `~/.config/tinify/token`
+  4. `--api-key` as compatibility fallback only
 - Python 3.10+ (stdlib only, no extra packages needed)
 
 ## API Key Resolution (for Claude)
@@ -17,16 +21,22 @@ Compress images via the [Tinify API](https://api.tinify.com) (TinyPNG/TinyJPG). 
 Before running any script, resolve the API key in this order — **never ask the user to paste it in chat**:
 
 1. Check if `TINIFY_API_KEY` is already set in the shell environment.
-2. Look for a `.env` file in the workspace root; if found, read the value of `TINIFY_API_KEY` from it.
-3. If still not found, tell the user to add `TINIFY_API_KEY=<your_key>` to their workspace `.env` and link them to https://tinify.com/developers for a free key.
+2. Look for `TINIFY_API_KEY` in the project `.env` at git root.
+3. If still not found, read `~/.config/tinify/token` (recommended shared setup).
+4. Only if needed for compatibility, allow `--api-key`; do not recommend it.
+5. If still not found, tell the user to configure one of:
+   - `export TINIFY_API_KEY=<your_key>`
+   - project `.env`: `TINIFY_API_KEY=<your_key>`
+   - `mkdir -p ~/.config/tinify && echo "<your_key>" > ~/.config/tinify/token`
+   Then link them to https://tinify.com/developers for a free key.
 
-When running the script, export the key inline so the subprocess picks it up:
+Preferred invocation:
 
 ```bash
-export TINIFY_API_KEY="<resolved_key>" && python3 scripts/compress.py <input>
+python3 scripts/compress.py <input>
 ```
 
-Never pass the key via `--api-key` (it exposes the secret in shell history).
+Avoid `--api-key` in normal usage; it exposes the secret in shell history.
 
 ## Quick Start
 
@@ -89,4 +99,10 @@ Get a free API key at https://tinify.com/developers — free tier allows 500 com
 Store it securely:
 ```bash
 export TINIFY_API_KEY="your_key_here"
+```
+
+Or save it once for all projects:
+```bash
+mkdir -p ~/.config/tinify
+echo "your_key_here" > ~/.config/tinify/token
 ```
