@@ -1,8 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+DETACH_MODE="none"
+PREPARED_STATUS_FILE=0
+while [[ $# -gt 0 ]]; do
+  case "${1:-}" in
+    --prepared-status-file)
+      PREPARED_STATUS_FILE=1
+      shift
+      ;;
+    --detach-tmux)
+      DETACH_MODE="tmux"
+      shift
+      ;;
+    --detach=*)
+      DETACH_MODE="${1#--detach=}"
+      shift
+      ;;
+    --detach)
+      if [[ $# -lt 2 ]]; then
+        echo "missing value for --detach (expected auto|tmux|none)" >&2
+        exit 2
+      fi
+      DETACH_MODE="$2"
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+case "$DETACH_MODE" in
+  auto|tmux|none)
+    ;;
+  *)
+    echo "unsupported detach mode: $DETACH_MODE (must be auto, tmux, or none)" >&2
+    exit 2
+    ;;
+esac
+
 if [[ $# -lt 4 ]]; then
-  echo "usage: $0 <runner: codex|claude|crush|opencode> <task-name> <prompt-file> <role: agent|peer> [workdir]" >&2
+  echo "usage: $0 [--detach=auto|tmux|none] [--detach-tmux] <runner: codex|claude|crush|opencode> <task-name> <prompt-file> <role: agent|peer> [workdir]" >&2
   exit 2
 fi
 
@@ -11,6 +50,7 @@ TASK_NAME="$2"
 PROMPT_FILE="$3"
 ROLE="$4"
 WORKDIR="${5:-$PWD}"
+SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
 # TASK_NAME 合法性校验：仅允许字母、数字、连字符、下划线、点（但不能是纯 "." 或 ".."）
 if [[ ! "$TASK_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
@@ -52,31 +92,116 @@ case "$ROLE" in
     ;;
 esac
 
-mkdir -p "$TASK_DIR"
+ensure_git_exclude() {
+  local git_dir exclude_file
 
-# 同一 task-name + role 只允许执行一次，避免后续轮次静默覆盖前一轮产物。
-if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" || -e "$STATUS_FILE" ]]; then
-  echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+  git_dir="$(git -C "$WORKDIR" rev-parse --absolute-git-dir 2>/dev/null || true)"
+  if [[ -n "$git_dir" ]]; then
+    exclude_file="$git_dir/info/exclude"
+    mkdir -p "$(dirname "$exclude_file")"
+    if ! grep -qxF '.agent-loop/' "$exclude_file" 2>/dev/null; then
+      echo '.agent-loop/' >> "$exclude_file"
+    fi
+  fi
+}
+
+STATUS_WRITTEN=0
+
+write_status() {
+  local value="$1"
+  printf '%s\n' "$value" > "$STATUS_FILE"
+  STATUS_WRITTEN=1
+}
+
+case "$RUNNER" in
+  codex|claude|crush|opencode)
+    ;;
+  *)
+    echo "unsupported runner: $RUNNER" >&2
+    exit 2
+    ;;
+esac
+
+if [[ ! -f "$PROMPT_FILE" ]]; then
+  if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
+    write_status "error"
+  fi
+  echo "prompt file not found: $PROMPT_FILE" >&2
   exit 2
 fi
 
-: > "$STATUS_FILE"
-
-# 自动把 .agent-loop/ 加入本地 git exclude，避免污染 git status
-GIT_DIR="$(git -C "$WORKDIR" rev-parse --absolute-git-dir 2>/dev/null || true)"
-if [[ -n "$GIT_DIR" ]]; then
-  EXCLUDE_FILE="$GIT_DIR/info/exclude"
-  mkdir -p "$(dirname "$EXCLUDE_FILE")"
-  if ! grep -qxF '.agent-loop/' "$EXCLUDE_FILE" 2>/dev/null; then
-    echo '.agent-loop/' >> "$EXCLUDE_FILE"
+if [[ "$DETACH_MODE" == "auto" ]]; then
+  if command -v tmux >/dev/null 2>&1; then
+    DETACH_MODE="tmux"
+  else
+    DETACH_MODE="none"
   fi
 fi
 
-if [[ ! -f "$PROMPT_FILE" ]]; then
-  echo "prompt file not found: $PROMPT_FILE" >&2
-  echo "error" > "$STATUS_FILE"
-  exit 2
+if [[ "$DETACH_MODE" == "tmux" ]]; then
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "tmux not found: detach=tmux unavailable" >&2
+    exit 2
+  fi
+
+  if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" || -e "$STATUS_FILE" ]]; then
+    echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+    exit 2
+  fi
+
+  mkdir -p "$TASK_DIR"
+  : > "$STATUS_FILE"
+  ensure_git_exclude
+
+  DETACH_SESSION="agent-loop-${TASK_NAME//[^a-zA-Z0-9_.-]/-}-$$"
+  DETACH_CMD="$(printf '%q ' "$SELF_PATH" "--prepared-status-file" "$RUNNER" "$TASK_NAME" "$PROMPT_FILE" "$ROLE" "$WORKDIR")"
+  if ! tmux new-session -d -s "$DETACH_SESSION" "cd $(printf '%q' "$WORKDIR") && exec ${DETACH_CMD% }"; then
+    write_status "error"
+    exit 1
+  fi
+  echo "detached:$DETACH_SESSION"
+  exit 0
 fi
+
+mkdir -p "$TASK_DIR"
+
+# 同一 task-name + role 只允许执行一次，避免后续轮次静默覆盖前一轮产物。
+if [[ "$PREPARED_STATUS_FILE" -eq 1 ]]; then
+  if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" ]]; then
+    write_status "error"
+    echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+    exit 2
+  fi
+  if [[ ! -f "$STATUS_FILE" ]]; then
+    echo "prepared status file missing for detached child: $STATUS_FILE" >&2
+    exit 2
+  fi
+else
+  if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" || -e "$STATUS_FILE" ]]; then
+    echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+    exit 2
+  fi
+  : > "$STATUS_FILE"
+fi
+
+finalize_status() {
+  local exit_code=$?
+  if [[ ${STATUS_WRITTEN:-0} -eq 0 ]]; then
+    if [[ $exit_code -eq 0 ]]; then
+      write_status "done"
+    else
+      write_status "error"
+    fi
+  fi
+  exit "$exit_code"
+}
+
+trap finalize_status EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+ensure_git_exclude
 
 run_codex() {
   # 预清空输出文件，与 claude/crush/opencode 的 > 重定向行为对称
@@ -115,39 +240,34 @@ run_opencode() {
 case "$RUNNER" in
   codex)
     if run_codex; then
-      echo "done" > "$STATUS_FILE"
+      write_status "done"
       echo "done"
       exit 0
     fi
     ;;
   claude)
     if run_claude; then
-      echo "done" > "$STATUS_FILE"
+      write_status "done"
       echo "done"
       exit 0
     fi
     ;;
   crush)
     if run_crush; then
-      echo "done" > "$STATUS_FILE"
+      write_status "done"
       echo "done"
       exit 0
     fi
     ;;
   opencode)
     if run_opencode; then
-      echo "done" > "$STATUS_FILE"
+      write_status "done"
       echo "done"
       exit 0
     fi
     ;;
-  *)
-    echo "unsupported runner: $RUNNER" >&2
-    echo "error" > "$STATUS_FILE"
-    exit 2
-    ;;
 esac
 
-echo "error" > "$STATUS_FILE"
+write_status "error"
 echo "error"
 exit 1

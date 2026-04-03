@@ -31,18 +31,35 @@ metadata:
 1. **确认拓扑**：明确谁是 controller，谁是 agent，是否需要 peer。
 2. **选定任务名**：每一轮执行都使用唯一的 `<task-name>`，工作目录为 `$WORKDIR/.agent-loop/<task-name>/`，多任务并行不冲突。
    - 推荐命名：`<step>-<module>-r1`、`<step>-<module>-r2`、`<step>-<module>-r3`
-   - 禁止复用如 `review-spec-payment` 这样的固定 task-name 跑多轮；否则后续轮次会覆盖前一轮的 `agent-output.md` / `peer-output.md`
+   - 禁止复用如 `review-spec-payment` 这样的固定 task-name 跑多轮；当前脚本会拒绝复用同角色产物，从而避免后续轮次覆盖前一轮的 `agent-output.md` / `peer-output.md`
 3. **写入本轮任务**：controller 将任务描述写入 `$WORKDIR/.agent-loop/<task-name>/agent-task.md`，参考 `templates/agent-prompt.txt`，要求 agent 只输出结构化发现，不输出推理过程或完整日志。
-4. **启动 agent**：`run_agent.sh` 本身是同步阻塞的，controller 需要以后台方式调用（如 `run_in_background`、`&`）来实现非阻塞。
+4. **启动 agent**：`run_agent.sh` 默认是同步阻塞的。
+   - **推荐入口**：优先使用 `--detach=auto`。有 `tmux` 时会自动脱离到独立 tmux session；没有 `tmux` 时回退到普通同步模式。
+   - **controller 责任**：
+     - 使用 `--detach=tmux` 时，`run_agent.sh` 会在返回前预创建空的 `*-status.txt`，controller 可立即开始轮询，**不要再额外追加 `&`**
+     - 使用 `--detach=auto` 时，若当前机器装有 `tmux`，行为与 `--detach=tmux` 相同；若没有 `tmux`，则退化为同步阻塞模式
+     - 使用 `--detach=none` 或不传 detach 参数时，controller 如需非阻塞，仍需自己做后台化（如 `run_in_background`、`&`）
+   - **当前环境优先做法**：如果 controller 需要可靠的“立即返回后轮询”，优先确保宿主机有 `tmux` 并使用 `--detach=auto` 或 `--detach=tmux`
    - **命令格式约束**：构造 Bash 命令时，必须先将 `$SKILL_DIR` 解析为绝对路径字符串，然后在命令中直接使用该绝对路径字面量。**禁止**在 Bash 命令中使用 `$SKILL_DIR` 变量引用（如 `$SKILL_DIR/scripts/...`）或内联赋值（如 `SKILL_DIR="..." $SKILL_DIR/scripts/...`）。这确保命令格式一致，便于权限规则匹配。
-   - `codex` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh codex <task-name> <agent-task.md路径> agent <workdir>`
-     - ⚠️ macOS + Claude Code 环境下，必须以 `dangerouslyDisableSandbox: true` 调用（详见「已知平台问题」）。Codex 自身沙箱仍生效，安全性不受影响。
-   - `claude` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh claude <task-name> <agent-task.md路径> agent <workdir>`
+   - `codex` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex <task-name> <agent-task.md路径> agent <workdir>`
+      - ⚠️ macOS + Claude Code 环境下，必须以 `dangerouslyDisableSandbox: true` 调用（详见「已知平台问题」）。Codex 自身沙箱仍生效，安全性不受影响。
+   - `claude` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude <task-name> <agent-task.md路径> agent <workdir>`
      - 无平台限制，可在任意环境直接运行。
-   - `crush` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh crush <task-name> <agent-task.md路径> agent <workdir>`
+   - `crush` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush <task-name> <agent-task.md路径> agent <workdir>`
      - 通过 `crush run` 非交互模式执行，需预先配置 provider。
-   - `opencode` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode <task-name> <agent-task.md路径> agent <workdir>`
+   - `opencode` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto opencode <task-name> <agent-task.md路径> agent <workdir>`
      - 通过 `opencode run` 非交互模式执行，支持内置免费模型或自配 provider。
+   - 自动脱离模式：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto <runner> <task-name> <agent-task.md路径> agent <workdir>`
+     - 有 `tmux` 时自动使用独立 tmux session
+     - 没有 `tmux` 时自动回退到普通同步模式
+   - `tmux` 脱离模式：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=tmux <runner> <task-name> <agent-task.md路径> agent <workdir>`
+     - 适用于 controller 的宿主环境会在命令返回后清理后台子进程的情况
+     - runner 会在独立的 tmux session 中执行，stdout 返回 `detached:<session-name>`
+     - `*-status.txt` 会在命令返回前以空文件形式创建，因此 controller 可以立即轮询；若文件不存在，仍应视为参数校验失败
+   - 显式禁用脱离：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=none <runner> <task-name> <agent-task.md路径> agent <workdir>`
+     - 强制使用当前进程模型
+   - 兼容别名：`--detach-tmux`
+     - 等价于 `--detach=tmux`
 5. **轮询等待 agent 完成**：agent 执行耗时因任务复杂度差异很大（数秒到数分钟均属正常），controller 需要耐心等待，通过定时轮询 `*-status.txt` 判断是否完成：
    - 轮询间隔：每 **30 秒** 检查一次 `agent-status.txt`（或 `peer-status.txt`）
    - 超时上限：**10 分钟**；超时后视为 error，记录日志并升级给用户
@@ -57,10 +74,10 @@ metadata:
    - 明显错误或脱离上下文 → 拒绝，记录原因
    - 涉及产品、架构、安全、权衡判断 → 暂停，升级给用户
 8. **需要第二视角时拉起 peer**：controller 编写单独的 peer 任务文件（如 `peer-task.md`），在指令中明确包含 `agent-output.md` 的路径，要求 peer 读取后给出独立意见。controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 agent 产物。controller 读取两份发现后再裁决。
-   - `codex` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh codex <task-name> <peer-task.md路径> peer <workdir>`
-   - `claude` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh claude <task-name> <peer-task.md路径> peer <workdir>`
-   - `crush` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh crush <task-name> <peer-task.md路径> peer <workdir>`
-   - `opencode` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode <task-name> <peer-task.md路径> peer <workdir>`
+   - `codex` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex <task-name> <peer-task.md路径> peer <workdir>`
+   - `claude` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude <task-name> <peer-task.md路径> peer <workdir>`
+   - `crush` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush <task-name> <peer-task.md路径> peer <workdir>`
+   - `opencode` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto opencode <task-name> <peer-task.md路径> peer <workdir>`
 9. **有界循环**：每一轮在执行层面独立——agent 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
    - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
    - **继续条件**：经 controller 重新评估后，本轮存在至少一条被裁决为 Major 及以上的发现（无论是否已修复）→ 修复后**必须**启动下一轮，由新 agent 独立审查当前状态。**禁止以任何理由跳过验证轮**——包括但不限于"修复很简单"、"只是文档补充"、"不存在引入新问题的风险"、"可直接确认正确性"。这些都是 rationalization，不构成跳过验证的合法依据。
@@ -82,8 +99,8 @@ $WORKDIR/.agent-loop/
     peer-output.md   # peer 对主 agent 发现的独立意见，可选（controller 读取后裁决）
     agent.log        # 主 agent 原始输出，严禁读取（需用户明确授权）
     peer.log         # peer 原始输出，严禁读取（需用户明确授权）
-    agent-status.txt # 主 agent 运行状态：done | error
-    peer-status.txt  # peer 运行状态：done | error
+    agent-status.txt # 主 agent 运行状态：空(运行中) | done | error
+    peer-status.txt  # peer 运行状态：空(运行中) | done | error
 ```
 
 ## `agent-task.md` / `peer-task.md` 编写方式
@@ -127,19 +144,21 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 - controller 裁决时必须独立判断严重度，不得直接采信 agent 标注。已知退化模式：后期轮次 agent 将 Minor 膨胀为 Major、将"修复未传播"包装为新发现
 - 结构化输出文件必须与原始日志文件分离
 - `run_agent.sh` 会拒绝复用已存在同角色产物的 task-name；controller 看到该错误时，应新建下一轮目录而不是重试覆盖
-- `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断。注意：若 `run_agent.sh` 在参数校验阶段（参数不足、workdir 不存在、task-name 非法、role 非法）就退出，status 文件不会被创建——controller 应确保调用参数正确，这些是 controller 编程错误而非运行时失败
+- `run_agent.sh` 现在会在异常退出（包括被 `TERM/HUP/INT` 打断）时将 `*-status.txt` 写为 `error`，避免遗留空状态文件误判为"仍在运行"
+- `--detach=tmux` 会在外层命令返回前预创建空的 `*-status.txt`；因此在该模式下，controller 可以立即开始轮询，而不必容忍“文件暂时不存在”的过渡窗口
+- `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断。注意：若 `run_agent.sh` 在参数校验阶段（参数不足、workdir 不存在、task-name 非法、role 非法、prompt 文件不存在）就退出，status 文件不会被创建——controller 应确保调用参数正确，这些是 controller 编程错误而非运行时失败
 - `run_agent.sh` 首次运行时自动将 `.agent-loop/` 加入 `.git/info/exclude`，避免协议文件污染 agent 的仓库视图
 
 # 验证方式
 
 最小验证：
 
-1. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh codex test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认产生 `agent-output.md`、`agent.log`、`agent-status.txt`
-2. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh codex test-task .agent-loop/test-task/peer-task.md peer <repo>`，确认产生 `peer-output.md`、`peer.log`，且 `agent-output.md` 未被覆盖
-3. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh claude test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
-4. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh crush test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
-5. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh opencode test-task .agent-loop/test-task/agent-task.md agent <repo>`，确认行为一致
-6. 对 claude/crush/opencode 分别执行 peer 角色（`role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖 agent 产物
+1. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex test-codex .agent-loop/test-codex/agent-task.md agent <repo>`，确认产生 `agent-output.md`、`agent.log`、`agent-status.txt`
+2. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex test-codex .agent-loop/test-codex/peer-task.md peer <repo>`，确认产生 `peer-output.md`、`peer.log`，且 `agent-output.md` 未被覆盖
+3. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude test-claude .agent-loop/test-claude/agent-task.md agent <repo>`，确认行为一致
+4. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush test-crush .agent-loop/test-crush/agent-task.md agent <repo>`，确认行为一致
+5. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto opencode test-opencode .agent-loop/test-opencode/agent-task.md agent <repo>`，确认行为一致
+6. 对 claude/crush/opencode 分别以各自的 task-name 执行 peer 角色（如 `test-claude` + `role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖对应 agent 产物
 7. 确认多个 task-name 并行不冲突
 8. 确认首次运行后 `.agent-loop/` 已被写入 `<repo>/.git/info/exclude`
 
@@ -161,7 +180,7 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 
 # 引用资料
 
-- `$SKILL_DIR/scripts/run_agent.sh` — runner 包装脚本，controller 通过它启动 agent（脚本本身同步执行，controller 负责后台化）
+- `$SKILL_DIR/scripts/run_agent.sh` — runner 包装脚本，controller 通过它启动 agent（推荐用 `--detach=auto` 让脚本自行决定是否脱离）
 - `$SKILL_DIR/templates/agent-prompt.txt` — controller 每轮写入 `agent-task.md` / `peer-task.md` 时参考的模板，填入具体任务描述后发给 agent 或 peer
 - 本机 CLI 自检：`codex exec --help`
 - 本机 CLI 自检：`claude --help`
