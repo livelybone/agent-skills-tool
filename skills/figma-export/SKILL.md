@@ -50,6 +50,12 @@ Agent 结合截图和节点树识别需要导出的资源：
 - logo/mascot（较大的复合节点）
 - 复合 icon（如 Google logo 由多个 Vector 组成）：**选择父节点**而非子 Vector
 
+阴影处理规则：
+- 默认**不要导出阴影**；阴影应在代码里实现（如 CSS `box-shadow`、`filter: drop-shadow(...)`、Canvas 绘制逻辑）
+- 选点时优先选择**不包含阴影效果**的主体节点，而不是带阴影的外层容器
+- 如果主体和阴影在 Figma 中可分离，只导出主体；不要为了保留阴影扩大导出范围
+- 如果阴影已经烘焙进位图、无法通过换节点排除，先明确告知用户当前资源无法无损去阴影，再决定是否继续导出
+
 ### Step 3: 生成 nodes 缓存
 
 Agent 将识别出的候选节点写入项目内的 `nodes-<fileKey>-<nodeId>.json`，作为**节点分析缓存 + 导出状态文件**。不再单独生成 manifest。
@@ -104,6 +110,7 @@ Agent 将识别出的候选节点写入项目内的 `nodes-<fileKey>-<nodeId>.js
 - `export.selected=true` 表示本次要切图
 - `export.fileName` 必须是 kebab-case（仅小写字母、数字、连字符 `-`），脚本自动追加 `@2x.png`
 - `export.format` 当前仅支持 `png`，`export.scale` 当前仅支持 `2`
+- 导出节点不应仅为了保留阴影而选择外层容器；若阴影来自 Figma effect，应在代码层重建
 - 后续补切、重切、改输出目录时，直接复用同一份 `nodes-<fileKey>-<nodeId>.json`
 
 ### Step 4: 导出 + 保存 + 验证 + 压缩（一次脚本调用）
