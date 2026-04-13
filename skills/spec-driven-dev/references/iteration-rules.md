@@ -48,6 +48,22 @@
 
 → 停止实现 → 确认根因是 Plan 的契约定义有歧义（而非单模块 Spec 问题）→ 人修订 Plan 中相关模块的"产出契约"→ 受影响模块重新走 Spec → Scenario → Test → Feature
 
+## 上游契约（model.md / epic-model.md）回修后的追溯产物失效
+
+**任何**阶段发现上游契约需要回修（包括模块级 `model.md`、Epic 级 `epic-model.md`、等效上游文档），必须同步失效并重建下游**所有**带 `upstream-ref` 的追溯产物。
+
+| 失效对象 | 处理 |
+|---------|------|
+| 引用了**被改动锚点**的 Spec 规则 | 标记 `stale: upstream 回修 <ref>` → 人/AI 修订 → 重新生成下游 |
+| 引用了被改动锚点的 Scenario | 同上 |
+| 引用了被改动锚点的 Test | 同上；若测试断言的是已删除的不变量/派生，直接删除对应 test |
+| 引用了被改动锚点的 Impl 注释和 Coverage Matrix 行 | 更新 Matrix；若 Impl 依赖了已删除的不变量，按 Spec 变更流程重新实现 |
+| `upstream-change-log.md` | 记录本次改动：被改锚点、触发阶段、影响的下游产物列表 |
+
+**硬约束**：上游回修后，`scripts/check-upstream-coverage.sh` 必须重新通过才能进入 CI。若 Matrix 中残留对已删除锚点的引用，校验会直接失败。
+
+仅 Epic 级 `epic-model.md` 的回修有额外规则（涉及 Plan、多模块失效）——见 `workflow-epic.md` 的"迭代回流规则"。
+
 ## Plan 回退限制
 
 **Plan 回退的触发条件须严格限定**，以下情况不应回退 Plan：

@@ -209,7 +209,7 @@ run_codex() {
   (
     cd "$WORKDIR"
     codex exec \
-      --sandbox workspace-write \
+      --sandbox danger-full-access \
       -C "$WORKDIR" \
       -o "$OUTPUT_FILE" \
       - < "$PROMPT_FILE"

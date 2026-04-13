@@ -1,6 +1,15 @@
 # 提示模板 — 功能实现
 
-根据 Spec 和批准的测试实现功能。
+根据 Spec、批准的测试、**上游契约**实现功能。
+
+## 必须输入（硬性前提）
+
+- Spec（业务规范）
+- 批准的测试用例（含 `@scenario` / `@upstream` 追溯字段）
+- **上游契约文档**（`model.md` / `epic-model.md` / 等效）——必须提供
+- Scenario 列表（含 `upstream-ref`）
+
+若缺任一，停止实现，向人工报告。
 
 ## 前置步骤：Baseline Test Run
 
@@ -30,15 +39,17 @@
 - 不要修改无关代码
 - 保持代码简洁、可读、可维护
 
-## Spec 完整性校验
+## Spec 完整性 + Upstream Coverage 校验
 
-实现完成后，必须**逐条对照 Spec 中定义的所有功能域/服务/组件**，确认：
+实现完成后，必须输出**两张矩阵**：
+
+### 矩阵 1：Spec 完整性矩阵
+
+逐条对照 Spec 中定义的所有功能域/服务/组件，确认：
 
 1. 每个功能域都有对应的**生产级实现**（不是 stub、不是 `throw new Error('not implemented')`）
 2. 每个功能域都有对应的测试 suite（测试是否通过由 CI 验证判定）
 3. 没有遗漏的功能域
-
-如果因客观原因（如原生依赖无法在当前环境安装）无法实现某个功能域，**必须向人工报告并获得确认**，不得自行决定跳过。
 
 输出格式：
 
@@ -49,7 +60,32 @@
 | ServiceB | ServiceB.test.ts | ❌ 仍为 stub | 需要安装 native 依赖，待确认 |
 ```
 
-矩阵由 AI 自检输出。若矩阵中所有功能域均为 ✅，进入 CI 验证；若存在任何 ❌ 项，**必须升级给人工确认**，不得自行决定跳过。
+### 矩阵 2：Upstream Coverage Matrix
+
+逐条对照**上游契约**中声明的所有实体/关系/不变量/派生关系，确认每条都有对应的 Spec 场景 / Test / Impl：
+
+```
+| upstream 条目 | Spec 场景 | Test 位置 | Impl 位置 | 状态 |
+|--------------|----------|----------|----------|------|
+| model.md#Invariant.Order.1 | S-1 [PROPERTY] | tests/order.prop.test.ts:42 | src/order.ts:validate | ✅ |
+| model.md#Derivation.Order.total | S-5 [UNIT] | tests/order.unit.test.ts:60 | src/order.ts:38 | ✅ |
+| model.md#Invariant.Order.5 | S-3 [CRITICAL][INTEGRATION] | tests/order.int.test.ts:80 | src/order.ts:cancel | ✅ |
+| model.md#Rel.Order-OrderItem | — | — | — | ⚠️ NOT APPLICABLE + 理由 |
+```
+
+**矩阵规则**：
+
+- 上游契约**每一条**必须在矩阵中出现（包括实体属性、关系、不变量、派生关系）
+- 每条的状态必须是 `✅`（完整覆盖）或 `⚠️ NOT APPLICABLE + <具体理由>`
+- 不接受 `❌` 或遗漏——出现即 DoD 不通过
+- 每条的 Spec/Test/Impl 位置必须是真实存在的引用；虚假引用直接 DoD 失败
+- Spec/Test/Impl 位置格式：**`file.ext:<lineno>` 或 `file.ext:<identifier>`**。复杂符号（如 `get total()`、`Class.method`、含空格或括号的符号）**必须**用行号形式——否则机械校验会判定为 INVALID SUFFIX
+
+### 校验流程
+
+- 两张矩阵均由 AI 自检输出
+- 若矩阵 1 存在任何 ❌ 项或矩阵 2 存在任何遗漏/虚假引用，**必须升级给人工确认**，不得自行决定跳过
+- 因客观原因无法实现的功能域或无法覆盖的 upstream 条目，必须向人工报告并获得确认
 
 ## 禁止事项
 

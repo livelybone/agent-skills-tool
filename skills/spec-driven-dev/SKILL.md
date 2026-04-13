@@ -58,10 +58,21 @@ metadata:
 ### Epic 流程
 
 ```
-Plan（模块拆解 + 依赖图 + 契约）→ 详见 references/workflow-epic.md
-→ Human Plan Review
-→ 对每个模块独立执行 Spec 层流程（按依赖顺序，可并行）
+① [Epic 上游契约产出]
+   契约：实体 + 关系 + 聚合边界 + 跨聚合共享不变量
+   默认实现：modeling-first 轮廓模式 → epic-model.md
+   可替换：等效 PRD / DDD 建模 / issue 文档（须满足上述契约结构）
+→ ② Plan（模块拆解 + 依赖图 + 契约，基于上游契约）→ 详见 references/workflow-epic.md
+→ ③ Human Plan Review（含上游对齐校验：聚合不跨模块、契约可追溯到上游）
+→ 对每个模块（按依赖顺序，可并行）：
+     ④ [模块上游契约产出]
+        契约：完整实体 + 派生关系 + 不变量 + Reuse Check
+        默认实现：modeling-first 完整模式 → <module>/model.md
+        可替换：等效详细需求文档（须满足上述契约结构）
+     → ⑤ 独立执行 Spec 层流程（每个产出条目必须带 upstream-ref）
 ```
+
+**关键约束**：Epic 流程**不允许跳过上游契约产出步骤**。即使用户选择替换实现（非 modeling-first），也必须产出满足契约结构的上游文档。"无上游" 不是合法状态，会卡在 DoR。
 
 ### Spec 层流程（每个模块）
 
@@ -115,10 +126,26 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 ### Epic 流程
 
 ```
-Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
-→ 对每个模块独立执行上方 Auto Spec 层流程
-→ 输出汇总 Decision Report（Plan 级 + 各模块级）
+① [Epic 上游契约产出]（默认 modeling-first 轮廓模式 → epic-model.md）
+→ AI 跨 agent 审查 上游契约（含契约结构完整性校验）→ AI 裁决 → Decision Log
+→ ② Plan 生成（基于上游契约）
+→ AI 跨 agent 审查 Plan（含上游对齐校验：聚合不跨模块、契约可追溯）→ AI 裁决 → Decision Log
+→ 对每个模块：
+     ③ [模块上游契约产出]（默认 modeling-first 完整模式 → <module>/model.md）
+     → AI 跨 agent 审查 模块上游契约 → AI 裁决 → Decision Log
+     → 独立执行上方 Auto Spec 层流程（每个产出带 upstream-ref）
+     → 若模块建模期间发现 Epic 上游有误，触发回流（详见 workflow-epic.md "迭代回流规则"）
+→ 输出汇总 Decision Report（上游契约级 + Plan 级 + 各模块级，含 Upstream Coverage Matrix）
 ```
+
+**Auto 模式下跨 agent 审查**：使用 `multi-agent-loop` skill 作为默认实现——审查任务使用 **agent 角色**（独立 agent 执行审查这项任务）；**peer 角色仅用于对已有 agent 产出做第二视角挑战**（见 `multi-agent-loop/SKILL.md`）。其他实现（如 PR bot、远程审查 API）只要产出相同形状的审查结论并接入 Decision Log，即可替换。
+
+各阶段审查任务的 prompt 模板：
+- 上游契约审查：`references/prompt-upstream-review.md`
+- Plan 审查：`references/prompt-plan-review.md`
+- Spec 审查：`references/prompt-spec-review.md`
+- Scenario 审查：`references/prompt-scenario-review.md`
+- Test 审查：`references/prompt-test-review.md`
 
 ---
 
@@ -193,12 +220,21 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 - ✅ 业务规则已定义（含已知边界规则）
 - ✅ 范围有界
 - ✅ 依赖项已知
+- ✅ **上游契约已就绪**（本模块/本 Epic 的领域真理源）——满足以下任一：
+  - 已产出 `model.md` / `epic-model.md`（默认路径，走 `modeling-first` skill）
+  - 已产出**等效上游文档**，且结构上满足：
+    - Epic 级：实体清单 + 关系 + 聚合边界 + 跨聚合共享不变量
+    - 模块级：完整实体 + 派生关系 + 不变量（每个实体至少一条或显式"无"） + Reuse Check
+  - 或明确记录"本阶段无需建模"的理由（仅限符合 `modeling-first` 的"不需要建模"清单的场景）
+- ✅ **上游文档可引用**：上游文档中每条实体/关系/不变量/派生关系/聚合都带 **`<!-- anchor: <Namespace>.<Name> -->` HTML 注释形式的显式锚点**（机械校验只认这种形式；heading / bold / 纯节标题**不被接受**），供下游产出标注 `upstream-ref`
 
 如不清楚，AI 必须提出澄清问题。
 
 ### Definition of Done（任务完成检查清单）
 
 - ✅ Plan Review 已完成（Epic 时适用）
+- ✅ **Upstream Coverage Matrix 已产出且完整**：上游契约中**每条**实体/关系/不变量/派生关系在矩阵中都有对应的 Spec 场景 / Test / Impl，或显式标注 `NOT APPLICABLE + 理由`（详见 `references/upstream-coverage.md`）
+- ✅ **所有产出条目 upstream-ref 合法**：Plan 的"持有聚合/模块依赖/产出契约"、Spec 的每条 Rule / State / State Transition、每个 Scenario、每个 Test、Impl 的 Coverage Matrix 条目，`upstream-ref` 都能在上游文档中找到对应锚点；不得存在虚假引用（由 `scripts/check-upstream-coverage.sh` 机械校验）
 - ✅ Spec 存在或已更新
 - ✅ Spec 审查已完成（标准模式：人工审查；Auto 模式：跨 agent 审查）
 - ✅ 场景已生成并审查
@@ -208,7 +244,7 @@ Plan 生成 → AI 跨 agent 审查 Plan → AI 裁决 → Decision Log
 - ✅ Baseline Test Run 已记录
 - ✅ 所有功能域已实现（不存在 stub）
 - ✅ Spec 完整性矩阵已输出
-- ✅ CI 验证通过（含 baseline 对比）
+- ✅ CI 验证通过（含 baseline 对比、coverage gate、mutation score gate — 由 `test-quality-gate` skill 提供）
 - ✅ 无关重构已避免
 - ✅ 现有行为未被静默破坏
 - ✅ Decision Report 已输出（Auto 模式适用）

@@ -11,12 +11,39 @@
 ## 要求
 
 - **按场景的测试类型标记（CONTRACT / INTEGRATION / PROPERTY / UNIT）决定测试类型**，不自行判断
+- **每个测试必须标注追溯字段**：
+  - `@scenario <scenario-id 或描述>` — 对应哪个场景
+  - `@upstream <upstream-ref>` — 从场景继承的上游契约引用
+- 追溯字段放在测试用例顶部注释或测试名前缀（语言/框架约定的任一种）
 - 优先行为级别测试
 - 优先工作流的集成测试
 - 当 API 模式稳定性重要时添加契约测试
 - 当存在不变规则时添加属性测试
 - 不要修改场景含义
 - 不要削弱现有测试
+
+### 追溯示例
+
+```ts
+// @scenario S-3 [CRITICAL][INTEGRATION] 用户取消已发货订单 → 取消失败
+// @upstream model.md#Invariant.Order.5
+it('rejects cancel when status is shipped', async () => {
+  // ...
+});
+```
+
+或使用测试名前缀：
+
+```ts
+it('[S-3 / model.md#Invariant.Order.5] rejects cancel when status is shipped', async () => {
+  // ...
+});
+```
+
+追溯字段的作用：
+- **审查**：跨 agent 审查时检查 scenario → test → upstream 链条完整
+- **CI 校验**：机械检查 upstream-ref 是否存在（见 `upstream-coverage.md`）
+- **覆盖矩阵**：Impl 阶段生成 Upstream Coverage Matrix 时需要读取
 
 ## 测试原则
 
