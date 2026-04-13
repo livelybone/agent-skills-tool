@@ -148,6 +148,15 @@ Some English prose without refs either.
   run_case "fake ref in matrix must be caught by Check 1" 2 "| model.md#Entity.Order | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
 | model.md#Invariant.Order.1 | S | src/order.ts:1 | src/order.ts:validate | ✅ |
 | model.md#Entity.FAKE | S | src/order.ts:1 | src/order.ts:render | ✅ |" || ((fails++))
+  # Matrix row with non-model basename MUST be caught by Check 1 (exit 2),
+  # not silently skipped by the strict regex and left for Check 2.
+  run_case "matrix row with PRD.md basename caught by Check 1" 2 "| model.md#Entity.Order | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
+| model.md#Invariant.Order.1 | S | src/order.ts:1 | src/order.ts:validate | ✅ |
+| PRD.md#Entity.Order | S | src/order.ts:1 | src/order.ts:render | ✅ |" || ((fails++))
+  # Matrix row with non-namespace anchor MUST be caught by Check 1 (exit 2).
+  run_case "matrix row with non-namespace anchor caught by Check 1" 2 "| model.md#Entity.Order | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
+| model.md#Invariant.Order.1 | S | src/order.ts:1 | src/order.ts:validate | ✅ |
+| model.md#OrderThing | S | src/order.ts:1 | src/order.ts:render | ✅ |" || ((fails++))
 
   # ── Parenthesized upstream-ref in refs-glob files ─────────────
   # When prose wraps the ref with `(...)` or `（...）`, the trailing paren must
@@ -174,6 +183,105 @@ EOF_MATRIX
   run_case_with_ref "ref with ascii paren trailing" 0 "docs/spec.md" "rule X (upstream-ref: model.md#Entity.Order)" || ((fails++))
   run_case_with_ref "ref with chinese paren trailing" 0 "docs/spec2.md" "规则 Y（upstream-ref: model.md#Entity.Order）" || ((fails++))
   run_case_with_ref "ref with comma trailing" 0 "docs/spec3.md" "See upstream-ref: model.md#Entity.Order, continuing" || ((fails++))
+  # non-modeling-first doc basename rejected (hard-coupling to modeling-first)
+  run_case_with_ref "ref to PRD.md rejected" 2 "docs/spec4.md" "upstream-ref: PRD.md#Entity.Order" || ((fails++))
+  # anchor without namespace prefix rejected
+  run_case_with_ref "ref with non-namespace anchor rejected" 2 "docs/spec5.md" "upstream-ref: model.md#OrderThing" || ((fails++))
+  # --upstream pointing at non-modeling-first basename rejected at load time
+  echo "- x" > other.md
+  cat > matrix.md <<'EOF_MATRIX'
+| model.md#Entity.Order | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
+| model.md#Invariant.Order.1 | S | src/order.ts:1 | src/order.ts:validate | ✅ |
+EOF_MATRIX
+  actual=$(bash "$SELF_SCRIPT" --upstream other.md --matrix matrix.md --repo-root "$ST_DIR" >/dev/null 2>&1; echo $?)
+  if [[ "$actual" == "1" ]]; then
+    echo "PASS [--upstream rejects non-model basename] exit=$actual"
+  else
+    echo "FAIL [--upstream rejects non-model basename] expected=1 actual=$actual"
+    ((fails++))
+  fi
+  rm -f other.md
+
+  # --upstream rejects two files sharing a basename (basename-match would silently misroute)
+  mkdir -p mod-a mod-b
+  cat > mod-a/model.md <<'EOF_A'
+<!-- anchor: Entity.A -->
+- A
+EOF_A
+  cat > mod-b/model.md <<'EOF_A'
+<!-- anchor: Entity.B -->
+- B
+EOF_A
+  cat > matrix.md <<'EOF_MATRIX'
+| model.md#Entity.A | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
+EOF_MATRIX
+  actual=$(bash "$SELF_SCRIPT" --upstream mod-a/model.md,mod-b/model.md --matrix matrix.md --repo-root "$ST_DIR" >/dev/null 2>&1; echo $?)
+  if [[ "$actual" == "1" ]]; then
+    echo "PASS [--upstream rejects duplicate basename] exit=$actual"
+  else
+    echo "FAIL [--upstream rejects duplicate basename] expected=1 actual=$actual"
+    ((fails++))
+  fi
+  rm -rf mod-a mod-b
+
+  # ── Namespace coverage: Aggregate / SharedInvariant / Derivation / Rel ─────
+  # Ensures every anchor namespace the regex permits is exercised end-to-end.
+  cat > epic-model.md <<'EOF_EPIC'
+<!-- anchor: Aggregate.Order -->
+- Order aggregate
+<!-- anchor: SharedInvariant.1 -->
+- cross-aggregate invariant
+<!-- anchor: Rel.Order-User -->
+- Order references User
+EOF_EPIC
+  mkdir -p m2
+  cat > m2/model.md <<'EOF_M2'
+<!-- anchor: Entity.Order -->
+- Order
+<!-- anchor: Invariant.Order.1 -->
+- total >= 0
+<!-- anchor: Derivation.Order.total -->
+- total = sum(items.price)
+EOF_M2
+  run_namespace_case() {
+    local name="$1"; local expected="$2"; local upstream="$3"; local matrix_content="$4"
+    echo "$matrix_content" > matrix.md
+    local actual
+    bash "$SELF_SCRIPT" --upstream "$upstream" --matrix matrix.md --repo-root "$ST_DIR" >/dev/null 2>&1
+    actual=$?
+    if [[ "$actual" == "$expected" ]]; then
+      echo "PASS [$name] exit=$actual"
+    else
+      echo "FAIL [$name] expected=$expected actual=$actual"
+      return 1
+    fi
+  }
+  run_namespace_case "Aggregate + SharedInvariant + Rel anchors (epic-model.md)" 0 "epic-model.md" "| epic-model.md#Aggregate.Order | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
+| epic-model.md#SharedInvariant.1 | S | src/order.ts:1 | src/order.ts:validate | ✅ |
+| epic-model.md#Rel.Order-User | S | src/order.ts:1 | src/order.ts:render | ✅ |" || ((fails++))
+  run_namespace_case "Derivation anchor with multi-dot name" 0 "m2/model.md" "| model.md#Entity.Order | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
+| model.md#Invariant.Order.1 | S | src/order.ts:1 | src/order.ts:validate | ✅ |
+| model.md#Derivation.Order.total | S | src/order.ts:1 | src/order.ts:render | ✅ |" || ((fails++))
+
+  # anchor must NOT start with digit (strict regex requires namespace letter prefix)
+  mkdir -p digit
+  cat > digit/model.md <<'EOF_DIGIT'
+<!-- anchor: Entity.Order -->
+- Order
+EOF_DIGIT
+  cat > matrix.md <<'EOF_MATRIX'
+| model.md#Entity.Order | S | src/order.ts:1 | src/order.ts:cancel | ✅ |
+| model.md#123.Order | S | src/order.ts:1 | src/order.ts:validate | ✅ |
+EOF_MATRIX
+  actual=$(bash "$SELF_SCRIPT" --upstream digit/model.md --matrix matrix.md --repo-root "$ST_DIR" >/dev/null 2>&1; echo $?)
+  # 123.Order has no namespace prefix → permissive catches as malformed → exit 2
+  if [[ "$actual" == "2" ]]; then
+    echo "PASS [digit-prefixed anchor rejected] exit=$actual"
+  else
+    echo "FAIL [digit-prefixed anchor rejected] expected=2 actual=$actual"
+    ((fails++))
+  fi
+  rm -rf digit epic-model.md m2
 
   echo ""
   if [[ $fails -eq 0 ]]; then
@@ -240,7 +348,23 @@ for upstream in "${UPSTREAM_LIST[@]}"; do
     echo "Error: upstream file not found: $upstream" >&2
     exit 1
   fi
+  up_base=$(basename "$upstream")
+  if [[ "$up_base" != "model.md" && "$up_base" != "epic-model.md" ]]; then
+    echo "Error: --upstream must point to a file named 'model.md' or 'epic-model.md' (got basename: $up_base)" >&2
+    echo "       spec-driven-dev is hard-coupled to modeling-first; no other document types are accepted." >&2
+    exit 1
+  fi
   abs=$(abs_path "$upstream")
+  # Guard against same-basename collision: refs use basename-only matching, so
+  # registering two upstreams with the same basename (e.g. order/model.md +
+  # payment/model.md) would silently route every `model.md#X` ref to the first.
+  for prev in "${UPSTREAM_ABS_PATHS[@]}"; do
+    if [[ "$(basename "$prev")" == "$up_base" ]]; then
+      echo "Error: two --upstream files share basename '$up_base': $prev and $abs" >&2
+      echo "       refs resolve by basename only; run the script once per module instead." >&2
+      exit 1
+    fi
+  done
   UPSTREAM_ABS_PATHS+=("$abs")
   count=0
   while IFS= read -r anchor; do
@@ -277,35 +401,33 @@ collect_refs() {
           continue
         fi
         doc="${ref%%#*}"
-        anchor="${ref#*#}"
-        # Strip trailing punctuation commonly left when refs are embedded in prose/tables:
-        # `)` `）` `]` `,` `.` `;` `:` `。` `，` `；` `：` (Chinese punctuation included).
-        anchor=$(echo "$anchor" | sed -E 's/[)\)\],;:。，；：]+$//')
-        # Resolve doc path relative to the referencing file's directory,
-        # then compare against any of the registered upstream absolute paths.
-        src_dir=$(dirname "$file")
-        if [[ "$doc" = /* ]]; then
-          doc_abs="$doc"
+        anchor_raw="${ref#*#}"
+        # Strict anchor regex: namespace.name from modeling-first anchor conventions.
+        # The regex naturally terminates at any punctuation (`)`, `]`, `,`, `。` etc.),
+        # so refs embedded in prose or tables lose trailing junk without explicit stripping.
+        if [[ "$anchor_raw" =~ ^(Entity|Rel|Invariant|Derivation|Aggregate|SharedInvariant)\.[A-Za-z0-9._-]+ ]]; then
+          anchor="${BASH_REMATCH[0]}"
         else
-          doc_abs=$(cd "$src_dir" 2>/dev/null && cd "$(dirname "$doc")" 2>/dev/null && echo "$(pwd)/$(basename "$doc")" || echo "")
+          # Record as unresolvable → Check 1 will report it.
+          # Use __UNRESOLVED__ sentinel; empty TAB field is collapsed by IFS=$'\t'.
+          echo -e "${file}:${lineno}\t__UNRESOLVED__:${doc}#${anchor_raw}\t__INVALID_ANCHOR__" >> "$REFS_FILE"
+          continue
         fi
-        # Fallback: if resolution failed, try basename match against any registered upstream
-        if [[ -z "$doc_abs" || ! -f "$doc_abs" ]]; then
-          doc_base=$(basename "$doc")
-          for up in "${UPSTREAM_ABS_PATHS[@]}"; do
-            if [[ "$(basename "$up")" == "$doc_base" ]]; then
-              # Only fall back if exactly one upstream has this basename
-              matches=0
-              for u2 in "${UPSTREAM_ABS_PATHS[@]}"; do
-                [[ "$(basename "$u2")" == "$doc_base" ]] && ((matches++)) || true
-              done
-              if [[ $matches -eq 1 ]]; then
-                doc_abs="$up"
-              fi
-              break
-            fi
-          done
+        # Doc basename MUST be model.md or epic-model.md (hard-coupled to modeling-first).
+        # Paths are ignored for resolution — match by basename against registered upstreams.
+        # If two modules each register their own model.md, run this script once per module.
+        doc_base=$(basename "$doc")
+        if [[ "$doc_base" != "model.md" && "$doc_base" != "epic-model.md" ]]; then
+          echo -e "${file}:${lineno}\t__UNRESOLVED__:${doc}\t${anchor}" >> "$REFS_FILE"
+          continue
         fi
+        doc_abs=""
+        for up in "${UPSTREAM_ABS_PATHS[@]}"; do
+          if [[ "$(basename "$up")" == "$doc_base" ]]; then
+            doc_abs="$up"
+            break
+          fi
+        done
         echo -e "${file}:${lineno}\t${doc_abs}\t${anchor}" >> "$REFS_FILE"
       done
     done
@@ -408,24 +530,46 @@ if [[ "$AWK_STATUS" -ne 0 ]]; then
 fi
 
 # Scan stripped matrix for refs and record them in REFS_FILE for Check 1.
-matrix_dir=$(dirname "$MATRIX")
+# Strict pattern: <path-ending-in-model.md-or-epic-model.md>#<namespace>.<name>
+# The regex naturally stops at non-namespace characters (punctuation, pipes, etc.).
+MATRIX_REF_RE='[A-Za-z0-9_./-]*(epic-)?model\.md#(Entity|Rel|Invariant|Derivation|Aggregate|SharedInvariant)\.[A-Za-z0-9._-]+'
 matrix_lineno=0
+# Resolve doc path by basename match against registered upstreams (same as collect_refs).
+resolve_doc_by_basename() {
+  local doc="$1"
+  local doc_base=$(basename "$doc")
+  [[ "$doc_base" != "model.md" && "$doc_base" != "epic-model.md" ]] && { echo ""; return; }
+  local up
+  for up in "${UPSTREAM_ABS_PATHS[@]}"; do
+    if [[ "$(basename "$up")" == "$doc_base" ]]; then
+      echo "$up"
+      return
+    fi
+  done
+  echo ""
+}
 while IFS= read -r row; do
   matrix_lineno=$((matrix_lineno + 1))
   [[ -z "$row" ]] && continue
-  { echo "$row" | grep -oE '[^ |`<>]+\.md#[^ |`<>]+' 2>/dev/null || true; } | while read -r ref; do
+  # First pass: strict regex — collect well-formed refs.
+  { echo "$row" | grep -oE "$MATRIX_REF_RE" 2>/dev/null || true; } | while read -r ref; do
     [[ "$ref" == *"#"* ]] || continue
     doc="${ref%%#*}"
     anchor="${ref#*#}"
-    # Strip trailing punctuation that commonly appears when refs are embedded
-    # in prose/tables: `)` `）` `,` `.` `;` `:` (Chinese punctuation included).
-    anchor=$(echo "$anchor" | sed -E 's/[)\)\],;:。，；：]+$//')
-    if [[ "$doc" = /* ]]; then
-      doc_abs="$doc"
-    else
-      doc_abs=$(cd "$matrix_dir" 2>/dev/null && cd "$(dirname "$doc")" 2>/dev/null && echo "$(pwd)/$(basename "$doc")" || echo "")
-    fi
+    doc_abs=$(resolve_doc_by_basename "$doc")
     echo -e "${MATRIX}:${matrix_lineno}\t${doc_abs}\t${anchor}" >> "$REFS_FILE"
+  done
+  # Second pass: permissive regex — catch malformed refs (wrong basename or
+  # non-namespace anchor) that the strict regex would silently skip.
+  # This preserves the documented invariant: every <doc>#<anchor>-shaped token
+  # in the matrix is validated by Check 1 (exit 2), not left to Check 2.
+  { echo "$row" | grep -oE '[A-Za-z0-9_./-]+\.md#[A-Za-z0-9_.-]+' 2>/dev/null || true; } | while read -r raw_ref; do
+    # Skip if the strict regex would have matched (already recorded above).
+    if echo "$raw_ref" | grep -qE "^${MATRIX_REF_RE}$"; then
+      continue
+    fi
+    # Malformed ref → record as unresolvable so Check 1 reports it.
+    echo -e "${MATRIX}:${matrix_lineno}\t__UNRESOLVED__:${raw_ref}\t__INVALID_MATRIX_REF__" >> "$REFS_FILE"
   done
 done < "$MATRIX_STRIPPED"
 
@@ -439,9 +583,16 @@ FAKE_LOG="$TMP_DIR/fake.log"
 
 while IFS=$'\t' read -r src doc anchor; do
   [[ -z "$anchor" ]] && continue
-  # Empty doc = couldn't resolve — treat as fake
+  # Unresolvable marker (non-model.md basename, invalid anchor format, or missing upstream)
+  if [[ "$doc" == __UNRESOLVED__:* ]]; then
+    orig="${doc#__UNRESOLVED__:}"
+    echo "  - $src → ${orig} (doc basename must be model.md or epic-model.md; anchor must match Entity|Rel|Invariant|Derivation|Aggregate|SharedInvariant)" >> "$FAKE_LOG"
+    FAIL_1=1
+    continue
+  fi
+  # Empty doc = no upstream registered with this basename — treat as fake
   if [[ -z "$doc" ]]; then
-    echo "  - $src → (unresolvable doc path)#${anchor}" >> "$FAKE_LOG"
+    echo "  - $src → (no registered upstream matches this doc basename)#${anchor}" >> "$FAKE_LOG"
     FAIL_1=1
     continue
   fi
@@ -483,16 +634,11 @@ MATRIX_MAP="$TMP_DIR/matrix-map.tsv"   # columns: abs_doc TAB anchor TAB status 
 while IFS= read -r row; do
   [[ -z "$row" ]] && continue
   row_stripped="$row"
-  { echo "$row_stripped" | grep -oE '[^ |`<>]+\.md#[^ |`<>]+' 2>/dev/null || true; } | while read -r ref; do
+  { echo "$row_stripped" | grep -oE "$MATRIX_REF_RE" 2>/dev/null || true; } | while read -r ref; do
     [[ "$ref" == *"#"* ]] || continue
     doc="${ref%%#*}"
     anchor="${ref#*#}"
-    anchor=$(echo "$anchor" | sed -E 's/[)\)\],;:。，；：]+$//')
-    if [[ "$doc" = /* ]]; then
-      doc_abs="$doc"
-    else
-      doc_abs=$(cd "$matrix_dir" 2>/dev/null && cd "$(dirname "$doc")" 2>/dev/null && echo "$(pwd)/$(basename "$doc")" || echo "")
-    fi
+    doc_abs=$(resolve_doc_by_basename "$doc")
     if echo "$row_stripped" | grep -qE '✅'; then
       status="ok"
     elif echo "$row_stripped" | grep -qE 'NOT APPLICABLE[[:space:]]*\+[[:space:]]*[^[:space:]|]'; then

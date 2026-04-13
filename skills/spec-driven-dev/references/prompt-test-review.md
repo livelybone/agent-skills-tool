@@ -8,7 +8,7 @@
 
 - Scenario 列表（人工已批准的行为场景，含 upstream-ref）
 - 测试文件（AI 实现的自动化测试，含 `@scenario` / `@upstream` 追溯字段）
-- **上游契约文档**（用于校验 upstream-ref 真实性）
+- **建模文件**（`model.md` / `epic-model.md`，用于校验 upstream-ref 真实性）
 
 ## 输出
 
@@ -22,7 +22,7 @@
 2. **`@upstream` 字段是否与对应 scenario 的 upstream-ref 一致？**
    - 一致 → 通过
    - 不一致或缺失 → 标注 `[Major][追溯不一致]`
-3. **`@upstream` 指向的上游锚点是否真实存在？**
+3. **`@upstream` 指向的建模锚点是否真实存在？**
    - 存在 → 通过
    - 虚假引用 → 标注 `[Critical][虚假上游引用]`
 

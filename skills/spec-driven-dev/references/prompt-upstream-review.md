@@ -1,14 +1,14 @@
-# 提示模板 — 跨 agent 审查上游契约
+# 提示模板 — 跨 agent 审查建模产物
 
-你是一个独立的上游契约审查员，需要审查刚产出的 Epic 上游契约（`epic-model.md`）或模块上游契约（`<module>/model.md` 或等效文档）。
+你是一个独立的建模审查员，需要审查刚由 `modeling-first` 产出的 Epic 建模（`epic-model.md`）或模块建模（`<module>/model.md`）。
 
 **使用 agent 角色执行本任务**（不是 peer）——peer 角色用于对已有审查结论做第二视角挑战。
 
 ## 输入
 
-- 上游契约文档（`epic-model.md` / `model.md` / 等效 PRD）
+- 建模文件（`epic-model.md` / `model.md`）
 - 对应的需求原文（PRD / brainstorming 产出 / issue 链接）
-- 若审查模块级上游契约，还需：Epic 上游契约（用于检查共享实体引用关系）
+- 若审查模块建模，还需：`epic-model.md`（用于检查共享实体引用关系）
 
 ## 输出
 
@@ -54,16 +54,16 @@
 - 每条"已有代码"断言是否带**具体文件路径和符号名**？
 - 是否存在"项目里可能有"这类未验证的模糊陈述？
 
-### 6. 模块级特有：与 Epic 上游契约的对齐
+### 6. 模块级特有：与 epic-model 的对齐
 
-- 共享实体是否**引用** Epic 上游契约（`upstream-ref: epic-model.md#Entity.X`）而非重定义？
-- 模块的聚合是否与 Epic 上游契约声明的一致？
-- 发现 Epic 上游契约错误的 → 标注 `[Major][触发 Epic 回修]`，按 `workflow-epic.md` 的迭代回流规则处理
+- 共享实体是否**引用** `epic-model.md`（`upstream-ref: epic-model.md#Entity.X`）而非重定义？
+- 模块的聚合是否与 `epic-model.md` 声明的一致？
+- 发现 `epic-model.md` 错误的 → 标注 `[Major][触发 Epic 回修]`，按 `workflow-epic.md` 的迭代回流规则处理
 
 ## 严重度标注
 
 - `[Critical]`：锚点缺失/重复（机械校验会失败）、虚构实体、违反聚合边界
-- `[Major]`：不变量遗漏、派生未识别、Reuse Check 不合格、与 Epic 上游契约冲突
+- `[Major]`：不变量遗漏、派生未识别、Reuse Check 不合格、与 `epic-model.md` 冲突
 - `[Minor]`：命名风格、可读性、轻微遗漏
 - `[Info]`：观察或建议
 

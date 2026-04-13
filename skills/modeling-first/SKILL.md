@@ -10,6 +10,8 @@ metadata:
 
 > **背景**：LLM 默认用模式匹配方式实现需求（见到"列表页" → 套"表格+分页+筛选"模板），而非建模方式。结果是同一概念多处重复实现、应派生的值被当独立输入、与现有抽象平行新建相似概念。本 skill 强制在写代码前产出**最小领域模型**，把 LLM 从模式匹配切到建模模式。
 
+> **与 `spec-driven-dev` 的关系**：本 skill 是 `spec-driven-dev` 的硬依赖——所有 Epic/模块进入 Plan/Spec 前必须由本 skill 产出 `epic-model.md` / `model.md` 作为领域真理源，下游 `upstream-ref` 均指向本 skill 产出的锚点。本 skill 本身保持为原子 skill，可独立使用；编排由 `spec-driven-dev` 负责，本 skill 不越权。
+
 ## 适用场景
 
 判断标准是**需求是否引入新的领域信息**，不是改动范围大小。
@@ -39,7 +41,7 @@ metadata:
 | 维度 | 轮廓模式（Outline） | 完整模式（Full） |
 |------|-------------------|----------------|
 | 触发场景 | Epic / 跨模块 / 涉及多个聚合 | 单模块；或 Epic 拆分后的某个模块 |
-| 产出文件 | `epic-model.md` | `<module>/model.md` 或 `docs/models/<feature>.md` |
+| 产出文件 | `epic-model.md` | `<module>/model.md`（走 `spec-driven-dev` 时**必须**用此 basename；独立使用亦可放 `docs/models/<feature>/model.md`）|
 | 包含章节 | Context / Entities / Relationships（含聚合边界）/ Shared Invariants | 必填 7 章（Context / Entities / Relationships / Derivation Chains / Invariants / Reuse Check / Open Questions）+ 可选 1 章（API Surface） |
 | 不包含 | 派生关系、模块内部不变量、具体 Reuse Check | — |
 | 规模 | < 100 行 | < 150 行 |
@@ -58,7 +60,7 @@ metadata:
 
 - 需求描述（来自用户原话、brainstorming 产出、issue 链接之一）
 - 能访问项目源代码（用于 Reuse Check）
-- 产出目标路径：`docs/models/<feature>.md` 或就近放置
+- 产出目标路径：`<module>/model.md` 或 `docs/models/<feature>/model.md`（走 `spec-driven-dev` 时 basename **必须**为 `model.md` / `epic-model.md`，不得改名；`spec-driven-dev` 的机械校验会直接拒绝其他 basename）
 
 ## 执行步骤
 
@@ -152,7 +154,7 @@ metadata:
 ### Step 7: 产出建模文件
 
 - **轮廓模式**：按 `templates/epic-model.md` 输出 `epic-model.md`
-- **完整模式**：按 `templates/model.md` 输出 `<module>/model.md` 或 `docs/models/<feature>.md`
+- **完整模式**：按 `templates/model.md` 输出 `<module>/model.md`（或 `docs/models/<feature>/model.md`）。**basename 固定为 `model.md`**——`spec-driven-dev` 的机械校验只认 `model.md` / `epic-model.md`
 
 提交给用户确认后再进入下一阶段。
 

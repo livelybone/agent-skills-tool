@@ -211,7 +211,7 @@ AI 在以下约束下实现功能：
 - tests（含 baseline 对比）
 - **coverage gate**（覆盖率阈值检查，见 `test-quality-gate` skill）
 - **mutation score gate**（变异测试阈值检查，见 `test-quality-gate` skill）
-- **upstream coverage gate**（上游契约机械校验）：执行 `skills/spec-driven-dev/scripts/check-upstream-coverage.sh`，传入 `--upstream <上游文档>`、`--matrix <Upstream Coverage Matrix>`、`--refs-glob <测试/场景/Spec 文件 glob>`。脚本失败即 CI 失败。若本阶段明确"无需建模"（记录在 DoR 的理由中），跳过本项并在 CI 日志中显式注明
+- **upstream coverage gate**（建模追溯机械校验）：执行 `skills/spec-driven-dev/scripts/check-upstream-coverage.sh`，传入 `--upstream <model.md|epic-model.md>`（basename 必须是这两个之一，与 `modeling-first` 硬耦合）、`--matrix <Upstream Coverage Matrix>`、`--refs-glob <测试/场景/Spec 文件 glob>`。脚本失败即 CI 失败。若本阶段明确"无需建模"（记录在 DoR 的理由中），跳过本项并在 CI 日志中显式注明
 - CI pipeline
 
 > coverage gate 和 mutation score gate 的具体配置、阈值策略、打回修复流程由 `test-quality-gate` skill 提供。若项目尚未配置这两项 CI，在 CI Verification 步骤触发 `test-quality-gate` 的配置补全流程。

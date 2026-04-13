@@ -48,9 +48,9 @@
 
 → 停止实现 → 确认根因是 Plan 的契约定义有歧义（而非单模块 Spec 问题）→ 人修订 Plan 中相关模块的"产出契约"→ 受影响模块重新走 Spec → Scenario → Test → Feature
 
-## 上游契约（model.md / epic-model.md）回修后的追溯产物失效
+## 建模（model.md / epic-model.md）回修后的追溯产物失效
 
-**任何**阶段发现上游契约需要回修（包括模块级 `model.md`、Epic 级 `epic-model.md`、等效上游文档），必须同步失效并重建下游**所有**带 `upstream-ref` 的追溯产物。
+**任何**阶段发现建模文件需要回修（模块级 `model.md`、Epic 级 `epic-model.md`），必须同步失效并重建下游**所有**带 `upstream-ref` 的追溯产物。
 
 | 失效对象 | 处理 |
 |---------|------|

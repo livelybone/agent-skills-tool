@@ -5,7 +5,7 @@
 ## 输入
 
 - Spec（业务规范）
-- **上游契约文档**（`model.md` / `epic-model.md` / 等效 PRD）—— 必须提供，否则审查无法进行
+- **建模文件**（`model.md` / `epic-model.md`，由 `modeling-first` 产出）—— 必须提供，否则审查无法进行
 
 ## 输出
 
