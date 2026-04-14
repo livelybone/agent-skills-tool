@@ -62,7 +62,7 @@
 
 **硬约束**：上游回修后，`scripts/check-upstream-coverage.sh` 必须重新通过才能进入 CI。若 Matrix 中残留对已删除锚点的引用，校验会直接失败。
 
-仅 Epic 级 `epic-model.md` 的回修有额外规则（涉及 Plan、多模块失效）——见 `workflow-epic.md` 的"迭代回流规则"。
+仅 Epic 级 `epic-model.md` 的回修有额外规则（涉及 Plan、多模块失效）——见 `workflows/epic.md` 的"迭代回流规则"。
 
 ## Plan 回退限制
 
@@ -78,6 +78,6 @@
 
 - "人修订"替换为"AI 裁决并记录 Decision Log"
 - "与人确认"替换为"AI 自主裁决"——包括"Scenario 无法自动化"场景：AI 自行调整 Scenario 或测试策略，记录 Decision Log
-- AI 可在裁决权限范围内修改 Spec/Scenario/Plan（详见 workflow-auto.md > 裁决权限）
+- AI 可在裁决权限范围内修改 Spec/Scenario/Plan（详见 `workflows/auto.md` > 裁决权限）
 - 超出裁决权限的修改仍必须升级给用户
 - 每次修改必须记录 Decision Log，包含变更前后对照

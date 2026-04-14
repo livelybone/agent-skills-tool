@@ -34,12 +34,9 @@
 
 ## upstream-ref 规则
 
-- 每个场景**必须**带 `upstream-ref`，指向建模文件中对应的实体/关系/不变量/派生关系
-- 格式：`<doc>#<anchor>`，`<doc>` 的 basename **只接受** `model.md` 或 `epic-model.md`（如 `model.md#Invariant.Order.3`、`epic-model.md#Aggregate.Payment`）；其他文件名一律被 `check-upstream-coverage.sh` 视为虚假引用（exit 2）
-- 锚点命名规范（由 `modeling-first` 产出）：`Entity.<Name>` / `Rel.<A>-<B>` / `Invariant.<Entity>.<N>` / `Derivation.<Entity>.<field>` / `Aggregate.<Name>` / `SharedInvariant.<N>`
-- 一个场景可对应多条锚点（用逗号分隔）：`upstream-ref: model.md#Invariant.Order.3, model.md#Derivation.Order.total`
-- **罕见情况**：若场景描述的是建模文件中未声明的新业务规则 → 先回修建模，再写场景；不允许"场景写了建模里没有的东西"
-- 若场景不对应任何建模条目（例如纯基础设施测试、兼容性回归测试）→ 标注 `upstream-ref: N/A + 理由`，审查时会质问理由合理性
+每个场景**必须**带 `upstream-ref`。完整语法、锚点命名空间、N/A 规则见 `upstream-ref.md`（本目录下的唯一定义点）。
+
+场景内的格式：末尾用 `↑ upstream-ref: <doc>#<anchor>` 标注（见上方示例）。一个场景可对应多条锚点，用逗号分隔。
 
 ## 测试类型标记
 

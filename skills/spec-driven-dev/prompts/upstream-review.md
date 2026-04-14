@@ -16,10 +16,10 @@
 
 逐条回答：
 
-1. **锚点完整性**：每个 Entity / Relationship / Invariant / Derivation / Aggregate 是否都带 `<!-- anchor: <Namespace>.<Name> -->` 标记？
+1. **锚点完整性**：建模文件中的每个实体/关系/不变量/派生关系/聚合/共享不变量是否都带 `<!-- anchor: <Namespace>.<Name> -->` 标记？（六类命名空间见 `guides/upstream-ref.md`）
    - 是 → 通过
    - 缺失 → 标注 `[Critical][锚点缺失]`，列出缺锚点的条目。机械校验会直接失败
-2. **锚点命名规范**：锚点是否符合 `Entity.<Name>` / `Rel.<A>-<B>` / `Invariant.<Entity>.<N>` / `Derivation.<Entity>.<field>` / `Aggregate.<Name>` / `SharedInvariant.<N>`？
+2. **锚点命名规范**：锚点是否符合 `guides/upstream-ref.md` 定义的命名空间和格式？
    - 规范 → 通过
    - 不规范 → 标注 `[Major][命名不规范]`
 3. **锚点唯一性**：同一文档内有无重复锚点？
@@ -58,7 +58,7 @@
 
 - 共享实体是否**引用** `epic-model.md`（`upstream-ref: epic-model.md#Entity.X`）而非重定义？
 - 模块的聚合是否与 `epic-model.md` 声明的一致？
-- 发现 `epic-model.md` 错误的 → 标注 `[Major][触发 Epic 回修]`，按 `workflow-epic.md` 的迭代回流规则处理
+- 发现 `epic-model.md` 错误的 → 标注 `[Major][触发 Epic 回修]`，按 `workflows/epic.md` 的迭代回流规则处理
 
 ## 严重度标注
 

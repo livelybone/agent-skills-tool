@@ -71,7 +71,7 @@ metadata:
 ```
 ① [Epic 建模] 调用 modeling-first 轮廓模式 → epic-model.md
    产出：实体 + 关系 + 聚合边界 + 跨聚合共享不变量
-→ ② Plan（模块拆解 + 依赖图 + 契约，基于 epic-model.md）→ 详见 references/workflow-epic.md
+→ ② Plan（模块拆解 + 依赖图 + 契约，基于 epic-model.md）→ 详见 workflows/epic.md
 → ③ Human Plan Review（含上游对齐校验：聚合不跨模块、契约可追溯到 epic-model）
 → 对每个模块（按依赖顺序，可并行）：
      ④ [模块建模] 调用 modeling-first → <module>/model.md
@@ -87,21 +87,21 @@ metadata:
 
 ```
 0. 建模（始终执行，豁免需记录理由）           → 调用 modeling-first（全量或增量）
-1. Spec 生成                                → 详见 references/workflow-standard.md#步骤1
-2. 跨 agent 审查 Spec（按复杂度可选）          → 详见 references/workflow-standard.md#步骤1.5
-3. 人工 Spec 审查 + DoR 校验                 → 详见 references/workflow-standard.md#步骤1.6
-4. Scenario 生成                             → 详见 references/scenario-format.md
-5. 跨 agent 审查 Scenario（按复杂度可选）       → 详见 references/workflow-standard.md#步骤2.5
-6. 人工 Scenario 审查
-7. Test Implementation（含 Stub）              → 详见 references/workflow-standard.md#步骤4
-8. 跨 agent 审查 Test（按复杂度可选）           → 详见 references/workflow-standard.md#步骤4.5
-8.5 Red Run（始终执行）                        → 详见 references/workflow-standard.md#步骤4.55
-9. 人工 Test 审查（按复杂度可选）
-10. Feature Implementation（含 Baseline）      → 详见 references/workflow-standard.md#步骤5
-11. CI Verification                           → 详见 references/workflow-standard.md#步骤6
+1. Spec 生成                                → 详见 workflows/standard.md#步骤1
+2. 跨 agent 审查 Spec（按复杂度可选）          → 详见 workflows/standard.md#步骤2
+3. 人工 Spec 审查 + DoR 校验                 → 详见 workflows/standard.md#步骤3
+4. Scenario 生成                             → 详见 guides/scenario-format.md
+5. 跨 agent 审查 Scenario（按复杂度可选）       → 详见 workflows/standard.md#步骤5
+6. 人工 Scenario 审查                         → 详见 workflows/standard.md#步骤6
+7. Test Implementation（含 Stub）              → 详见 workflows/standard.md#步骤7
+8. 跨 agent 审查 Test（按复杂度可选）           → 详见 workflows/standard.md#步骤8
+8.5 Red Run（始终执行）                        → 详见 workflows/standard.md#步骤8.5
+9. 人工 Test 审查（按复杂度可选）               → 详见 workflows/standard.md#步骤9
+10. Feature Implementation（含 Baseline）      → 详见 workflows/standard.md#步骤10
+11. CI Verification                           → 详见 workflows/standard.md#步骤11
 ```
 
-步骤 0、7、8.5、10、11 始终执行。其余步骤按复杂度调整深度（详见 references/complexity-guide.md）。
+步骤 0、7、8.5、10、11 始终执行。其余步骤按复杂度调整深度（详见 guides/complexity.md）。
 
 ### 步骤 0 — 建模（详细规则）
 
@@ -132,7 +132,7 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 **禁止简化审查**：每个模块的每个审查步骤必须完整执行跨 agent 审查，不得因"改动小"、"上下文长"等理由降级。
 **Subagent 不替代流程**：subagent 只执行单步任务，不得将多个流程步骤打包；每步必须产出阶段性产物（Spec/Scenario 文件、Decision Log 等），缺产物禁止推进。
 **步骤严格串行**：单个模块内的步骤 0→1→…→13 必须顺序执行，不得并行。原因：每个审查步骤可能触发回退修正，后续步骤依赖前置步骤的审查结果。
-详细规则见 `references/workflow-auto.md`。
+详细规则见 `workflows/auto.md`。
 
 ### Spec 层流程（每个模块）
 
@@ -164,18 +164,18 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
      ③ [模块建模]（调用 modeling-first → <module>/model.md；无则全量，有则增量）
      → AI 跨 agent 审查 模块建模 → AI 裁决 → Decision Log
      → 独立执行上方 Auto Spec 层流程（步骤 0 已在 ③ 完成，从步骤 1 起继续；每个产出带 upstream-ref）
-     → 若模块建模期间发现 epic-model 有误，触发回流（详见 workflow-epic.md "迭代回流规则"）
+     → 若模块建模期间发现 epic-model 有误，触发回流（详见 workflows/epic.md "迭代回流规则"）
 → 输出汇总 Decision Report（建模级 + Plan 级 + 各模块级，含 Upstream Coverage Matrix）
 ```
 
 **Auto 模式下跨 agent 审查**：**必须且只能**通过 `multi-agent-loop` skill 启动——审查任务使用 **agent 角色**（独立 agent 执行审查这项任务）；**peer 角色仅用于对已有 agent 产出做第二视角挑战**（见 `multi-agent-loop/SKILL.md`）。详细工具级约束见下方"跨 Agent 审查原则"节。
 
 各阶段审查任务的 prompt 模板：
-- 建模审查（epic-model / model）：`references/prompt-upstream-review.md`
-- Plan 审查：`references/prompt-plan-review.md`
-- Spec 审查：`references/prompt-spec-review.md`
-- Scenario 审查：`references/prompt-scenario-review.md`
-- Test 审查：`references/prompt-test-review.md`
+- 建模审查（epic-model / model）：`prompts/upstream-review.md`
+- Plan 审查：`prompts/plan-review.md`
+- Spec 审查：`prompts/spec-review.md`
+- Scenario 审查：`prompts/scenario-review.md`
+- Test 审查：`prompts/test-review.md`
 
 ---
 
@@ -207,7 +207,7 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 
 ## 迭代修正机制
 
-任何阶段发现问题，允许回退上一步。详细回退规则见 `references/iteration-rules.md`。
+任何阶段发现问题，允许回退上一步。详细回退规则见 `guides/iteration-rules.md`。
 
 **关键原则**：
 
@@ -221,6 +221,72 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 
 - AI 可在裁决权限范围内修改 Spec/Scenario/Plan，但每次必须记录 Decision Log（含变更前后对照）
 - 超出裁决权限的修改仍必须升级给用户
+
+### 进度检查点
+
+流程执行中，进度状态嵌入已有产物文件（不创建额外文件），使新会话能从断点续接。
+
+**单模块级**：进度嵌入 `spec/<module>.md` 的 YAML frontmatter：
+
+```yaml
+---
+module: order
+current_step: 7
+current_step_name: Test Implementation
+status: in_progress          # pending | in_progress | done | blocked:<原因>
+last_completed_step: 6
+last_completed_step_name: Scenario Review
+context_summary: |
+  Spec 已审查通过，3 条 Rule。Scenario 12 个，含 2 个 CRITICAL。
+  审查轮次：Spec 2轮，Scenario 1轮，均无 Major。
+decision_log_ref: $TMPDIR/spec-driven-dev-1713072000/decision-log.md
+updated: 2026-04-14T10:30
+---
+```
+
+**Epic 级**：`plan.md` 尾部追加宏观进度索引，每个模块一行。详细上下文（`context_summary`、`decision_log_ref`）仍在各模块的 `spec/<module>.md` frontmatter 中：
+
+```markdown
+## Progress
+
+| 模块 | 步骤 | 状态 | 备注 |
+|------|------|------|------|
+| order | 7 Test Implementation | in_progress | 详见 spec/order.md frontmatter |
+| payment | 1 Spec 生成 | in_progress | |
+| notification | — | pending | 依赖 order |
+```
+
+**更新时机**：每个步骤完成后立即更新 `spec/<module>.md` frontmatter + plan.md Progress 表（Epic 时）。这是硬性要求。
+
+**续接协议**（新会话恢复执行时）：
+
+1. **定位**：读 `plan.md` 尾部 Progress 表（Epic）或 `spec/<module>.md` frontmatter（单模块），确定当前模块和步骤
+2. **恢复上下文**：读该模块 `spec/<module>.md` frontmatter 的 `context_summary`（裁决摘要、审查状态、已知问题）
+3. **恢复 Decision Log**：读 `decision_log_ref` 指向的 `$TMPDIR` 文件（若已被 OS 清理则标记为"Decision Log 已丢失，仅以产物为准"，不阻塞继续执行）
+4. **继续执行**：`status: in_progress` 从该步骤头重做，`last_completed_step` 之后的步骤正常推进
+
+### Context 压力处理
+
+**"上下文太长"不是中断理由，也不是简化审查的理由——而是触发压缩并继续的信号。**
+
+当 agent 感知到 context 接近上限时（如工具返回截断提示、模型输出被截断、或主观判断 context 已很长），执行以下操作：
+
+1. **写检查点**：立即更新当前模块的 frontmatter / plan.md Progress（确保进度持久化）
+2. **将 Decision Log 写入 `$TMPDIR`**（若尚未写入）
+3. **压缩上下文**：使用 `/compact` 或等效的 context 压缩机制，保留：
+   - 当前步骤的输入产物（Spec / Scenario / 当前正在处理的文件路径）
+   - 未完成的工作描述
+   - 丢弃：已完成步骤的中间输出、历史审查日志、已裁决的 Decision Log 全文（摘要已在 frontmatter）
+4. **继续执行**：压缩后从当前步骤继续，不因 context 压力额外暂停
+
+**与人工审查的关系**：标准模式下的人工审查步骤（Spec/Scenario/Test 人工审查）是流程设计的合法等待点，不受 context 压力处理影响。Context 压力处理的"不暂停"指的是：不以 context 为由在人工审查之外增加额外暂停。若 context 压力恰好在人工审查前触发，执行写检查点 → 压缩 → 进入人工审查等待（正常流程）。
+
+**禁止的行为**：
+- 以"上下文太长"为由在非人工审查步骤中断流程等待用户
+- 以"上下文太长"为由跳过审查步骤或降级审查深度
+- 以"上下文太长"为由将多个步骤打包交给 subagent
+
+**此规则适用于所有模式**（标准模式和 Auto 模式均适用）。
 
 ### 跨 Agent 审查原则
 
@@ -253,14 +319,14 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 - ✅ **建模文件已就绪**（本模块/本 Epic 的领域真理源）——由步骤 0 保证，满足以下任一：
   - 已通过 `modeling-first` 产出/增量更新 `model.md`（单模块）或 `epic-model.md`（Epic）+ 所属各 `<module>/model.md`
   - 或在步骤 0 明确记录"本阶段无需建模"的豁免理由，且场景符合 `modeling-first` 的"不需要建模"清单（Step 1）
-- ✅ **建模文件可引用**：每条实体/关系/不变量/派生关系/聚合都带 **`<!-- anchor: <Namespace>.<Name> -->` HTML 注释形式的显式锚点**（命名空间：`Entity` / `Rel` / `Invariant` / `Derivation` / `Aggregate` / `SharedInvariant`）。机械校验只认这种形式；heading / bold / 纯节标题**不被接受**。供下游产出标注 `upstream-ref`
+- ✅ **建模文件可引用**：每条实体/关系/不变量/派生关系/聚合都带显式锚点（格式和命名空间见 `guides/upstream-ref.md`）。供下游产出标注 `upstream-ref`
 
 如不清楚，AI 必须提出澄清问题。
 
 ### Definition of Done（任务完成检查清单）
 
 - ✅ Plan Review 已完成（Epic 时适用）
-- ✅ **Upstream Coverage Matrix 已产出且完整**：建模文件中**每条**实体/关系/不变量/派生关系在矩阵中都有对应的 Spec 场景 / Test / Impl，或显式标注 `NOT APPLICABLE + 理由`（详见 `references/upstream-coverage.md`）
+- ✅ **Upstream Coverage Matrix 已产出且完整**：建模文件中**每条带锚点的条目**（实体/关系/不变量/派生关系/聚合/共享不变量——即六类锚点命名空间）在矩阵中都有对应的 Spec 场景 / Test / Impl，或显式标注 `NOT APPLICABLE + 理由`（详见 `guides/upstream-coverage.md`）
 - ✅ **所有产出条目 upstream-ref 合法**：Plan 的"持有聚合/模块依赖/产出契约"、Spec 的每条 Rule / State / State Transition、每个 Scenario、每个 Test、Impl 的 Coverage Matrix 条目，`upstream-ref` 都能在 `model.md` / `epic-model.md` 中找到对应锚点；不得存在虚假引用（由 `scripts/check-upstream-coverage.sh` 机械校验）
 - ✅ Spec 存在或已更新
 - ✅ Spec 审查已完成（标准模式：人工审查；Auto 模式：跨 agent 审查）
@@ -282,21 +348,44 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 
 按需加载，不需要一次性阅读：
 
-| 文档                                                                                         | 何时读取                                               |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [modeling-first/SKILL.md](../modeling-first/SKILL.md)                                        | 执行步骤 0 建模时（全量或增量）                        |
-| [references/workflow-standard.md](./references/workflow-standard.md)                         | 执行标准模式各步骤时                                   |
-| [references/workflow-auto.md](./references/workflow-auto.md)                                 | 执行 Auto 模式时（裁决规则、Decision Log/Report 格式） |
-| [references/workflow-epic.md](./references/workflow-epic.md)                                 | 处理 Epic 需求时（Plan 格式、Review 检查点）           |
-| [references/complexity-guide.md](./references/complexity-guide.md)                           | 判断复杂度和审查深度时                                 |
-| [references/iteration-rules.md](./references/iteration-rules.md)                             | 任何阶段发现问题需要回退时                             |
-| [references/scenario-format.md](./references/scenario-format.md)                             | 生成或审查 Scenario 时                                 |
-| [references/testing-guide.md](./references/testing-guide.md)                                 | 决定测什么/不测什么时                                  |
-| [references/repo-structure.md](./references/repo-structure.md)                               | 创建测试文件或新模块时                                 |
-| [references/prompt-spec-review.md](./references/prompt-spec-review.md)                       | 跨 agent 审查 Spec 时                                  |
-| [references/prompt-scenario-generation.md](./references/prompt-scenario-generation.md)       | 生成 Scenario 时                                       |
-| [references/prompt-scenario-review.md](./references/prompt-scenario-review.md)               | 跨 agent 审查 Scenario 时                              |
-| [references/prompt-test-review.md](./references/prompt-test-review.md)                       | 跨 agent 审查 Test 时                                  |
-| [references/prompt-test-implementation.md](./references/prompt-test-implementation.md)       | 实现测试时                                             |
-| [references/prompt-feature-implementation.md](./references/prompt-feature-implementation.md) | 实现功能时                                             |
-| [references/prompt-test-expansion.md](./references/prompt-test-expansion.md)                 | 需要补充测试场景时（备用）                             |
+### 流程定义（workflows/）
+
+| 文档 | 何时读取 |
+|------|---------|
+| [workflows/standard.md](./workflows/standard.md) | 执行标准模式各步骤时 |
+| [workflows/auto.md](./workflows/auto.md) | 执行 Auto 模式时（裁决规则、Decision Log/Report 格式）|
+| [workflows/epic.md](./workflows/epic.md) | 处理 Epic 需求时（Plan 格式、Review 检查点）|
+
+### 任务指令（prompts/）
+
+| 文档 | 何时读取 |
+|------|---------|
+| [prompts/spec-review.md](./prompts/spec-review.md) | 跨 agent 审查 Spec 时 |
+| [prompts/scenario-generation.md](./prompts/scenario-generation.md) | 生成 Scenario 时 |
+| [prompts/scenario-review.md](./prompts/scenario-review.md) | 跨 agent 审查 Scenario 时 |
+| [prompts/test-implementation.md](./prompts/test-implementation.md) | 实现测试时 |
+| [prompts/test-review.md](./prompts/test-review.md) | 跨 agent 审查 Test 时 |
+| [prompts/test-expansion.md](./prompts/test-expansion.md) | 需要补充测试场景时（备用）|
+| [prompts/feature-implementation.md](./prompts/feature-implementation.md) | 实现功能时 |
+| [prompts/upstream-review.md](./prompts/upstream-review.md) | 跨 agent 审查建模文件时 |
+| [prompts/plan-review.md](./prompts/plan-review.md) | 跨 agent 审查 Plan 时 |
+
+### 规则与指南（guides/）
+
+| 文档 | 何时读取 |
+|------|---------|
+| [guides/upstream-ref.md](./guides/upstream-ref.md) | upstream-ref 语法、锚点命名（唯一定义点）|
+| [guides/testing.md](./guides/testing.md) | 测什么/不测什么/Stub/Red Run/禁止事项（唯一定义点）|
+| [guides/upstream-coverage.md](./guides/upstream-coverage.md) | Upstream Coverage Matrix 格式、机械校验规则 |
+| [guides/scenario-format.md](./guides/scenario-format.md) | 生成或审查 Scenario 时 |
+| [guides/complexity.md](./guides/complexity.md) | 判断复杂度和审查深度时 |
+| [guides/iteration-rules.md](./guides/iteration-rules.md) | 任何阶段发现问题需要回退时 |
+| [guides/repo-structure.md](./guides/repo-structure.md) | 创建测试文件或新模块时 |
+
+### 其他
+
+| 文档 | 何时读取 |
+|------|---------|
+| [modeling-first/SKILL.md](../modeling-first/SKILL.md) | 执行步骤 0 建模时（全量或增量）|
+| [templates/spec.md](./templates/spec.md) | 生成 Spec 时（步骤 1，含 frontmatter 进度检查点）|
+| [templates/plan.md](./templates/plan.md) | 生成 Plan 时（Epic 模式，含 Progress 进度表）|
