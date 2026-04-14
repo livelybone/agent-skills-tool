@@ -93,6 +93,63 @@ bash scripts/check-upstream-coverage.sh --self-test
 
 **文件名约束**：`--upstream` 指向的文件 basename 必须是 `model.md` 或 `epic-model.md`；其他 basename 拒绝加载（exit 1）。这是与 `modeling-first` 的硬耦合，消除"等效文档"的语义歧义。
 
+### Epic 多模块场景的调用方式
+
+由于单次运行不允许两个 `--upstream` 文件共享同一 basename（如 `order/model.md` + `payment/model.md` 都叫 `model.md`），Epic 多模块场景需**按模块分别运行**。
+
+**Shell loop 示例**：
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+EPIC_MODEL="docs/models/epic-model.md"
+MODULES=(order payment notification)
+FAILED=()
+
+# 1. 校验 epic-model 自身（用 epic-model.md 作为 upstream，校验 Plan 级引用）
+bash scripts/check-upstream-coverage.sh \
+  --upstream "$EPIC_MODEL" \
+  --matrix docs/coverage/epic-coverage.md \
+  --refs-glob 'docs/plan.md' || FAILED+=(epic)
+
+# 2. 按模块逐个校验
+for mod in "${MODULES[@]}"; do
+  echo "=== Checking module: $mod ==="
+  bash scripts/check-upstream-coverage.sh \
+    --upstream "docs/models/${mod}/model.md" \
+    --matrix "docs/coverage/${mod}-coverage.md" \
+    --refs-glob "tests/${mod}/**/*.test.ts,docs/scenarios/${mod}/**/*.md,spec/${mod}*.md" \
+    || FAILED+=("$mod")
+done
+
+if [ ${#FAILED[@]} -gt 0 ]; then
+  echo "❌ Upstream coverage failed for: ${FAILED[*]}"
+  exit 1
+fi
+echo "✅ All modules passed upstream coverage check"
+```
+
+**Makefile target 示例**：
+
+```makefile
+MODULES := order payment notification
+
+.PHONY: upstream-coverage
+upstream-coverage:
+	bash scripts/check-upstream-coverage.sh \
+	  --upstream docs/models/epic-model.md \
+	  --matrix docs/coverage/epic-coverage.md \
+	  --refs-glob 'docs/plan.md'
+	@for mod in $(MODULES); do \
+	  echo "=== Checking module: $$mod ==="; \
+	  bash scripts/check-upstream-coverage.sh \
+	    --upstream "docs/models/$$mod/model.md" \
+	    --matrix "docs/coverage/$$mod-coverage.md" \
+	    --refs-glob "tests/$$mod/**/*.test.ts,docs/scenarios/$$mod/**/*.md,spec/$$mod*.md"; \
+	done
+```
+
 脚本执行以下检查：
 
 ### 校验 1：upstream-ref 存在性

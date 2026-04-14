@@ -1,11 +1,12 @@
 ---
 name: spec-driven-dev
-description: 强制执行规范驱动的 AI 开发工作流。Epic 级需求先 Plan（模块拆解 + 依赖图 + 契约定义），再对每个模块独立走 Spec → Scenarios → Tests → Implementation → CI 流程。支持 Auto 模式（--auto）：全流程自动化，AI 审查裁决，结束后输出 Decision Report。触发词：spec、plan、epic、模块拆解、开发规范、需求拆分、--auto。
+description: 强制执行规范驱动的 AI 开发工作流。所有开发需求走 Model → Spec → Scenarios → Tests → Implementation → CI 全流程。Epic 级需求先 Plan（模块拆解 + 依赖图 + 契约定义），再对每个模块独立走完整流程。支持 Auto 模式（--auto）：全流程自动化，AI 审查裁决，结束后输出 Decision Report。触发词：spec、plan、epic、模块拆解、开发规范、需求拆分、--auto。
 metadata:
-  version: 2.0
+  version: 3.0
   tags:
     - ai-workflow
     - spec-driven
+    - modeling
     - epic-planning
     - testing
     - development-process
@@ -13,9 +14,15 @@ metadata:
 
 # 规范驱动开发 Skill
 
-## Skill 依赖
+## 建模集成
 
-本 skill 硬依赖 `modeling-first`（原子 skill）——所有 Epic / 模块进入 Plan / Spec 前必须先产出 `epic-model.md` / `model.md` 作为领域真理源，下游所有阶段的 `upstream-ref` 均指向该文件的锚点。`modeling-first` 方法论与模板（Entity/Rel/Invariant/Derivation/Aggregate/SharedInvariant 锚点命名空间）由其 SKILL 定义；本 skill 负责消费其产物、执行流程编排与机械校验。
+本 skill 将 `modeling-first`（原子 skill）作为流程内的**硬步骤**——与 `multi-agent-loop` 的集成方式相同：流程中直接调用，不可跳过。
+
+- **全量建模**：目标模块尚无 `model.md`（或 Epic 尚无 `epic-model.md`）→ 调用 `modeling-first` 完整/轮廓模式从零产出
+- **增量建模**：目标模块已有 `model.md` 且本次变更需要新增/修改领域信息 → 调用 `modeling-first` 在现有文件上增量更新（追加实体/关系/不变量/派生关系/锚点），经审查后继续 Spec 层
+- **豁免**：本次变更符合 `modeling-first` SKILL.md Step 1 "不需要建模"清单（纯样式/bug fix/机械字段增删等）→ 在 DoR 中记录豁免理由，跳过建模步骤
+
+`modeling-first` 方法论与模板（Entity/Rel/Invariant/Derivation/Aggregate/SharedInvariant 锚点命名空间）由其 SKILL 定义；本 skill 负责调用、消费产物、执行流程编排与机械校验。
 
 ## 核心原则
 
@@ -67,16 +74,19 @@ metadata:
 → ② Plan（模块拆解 + 依赖图 + 契约，基于 epic-model.md）→ 详见 references/workflow-epic.md
 → ③ Human Plan Review（含上游对齐校验：聚合不跨模块、契约可追溯到 epic-model）
 → 对每个模块（按依赖顺序，可并行）：
-     ④ [模块建模] 调用 modeling-first 完整模式 → <module>/model.md
+     ④ [模块建模] 调用 modeling-first → <module>/model.md
+        - 无 model.md → 全量建模（完整模式）
+        - 已有 model.md → 增量建模（在现有文件上追加/修改条目）
         产出：完整实体 + 派生关系 + 不变量 + Reuse Check
      → ⑤ 独立执行 Spec 层流程（每个产出条目必须带 upstream-ref 指向建模锚点）
 ```
 
-**关键约束**：Epic 流程**不允许跳过建模步骤**。`modeling-first` 是 spec-driven-dev 的硬依赖（原子 skill），产出 `epic-model.md` / `<module>/model.md`。没有建模文件会卡在 DoR。唯一豁免：符合 `modeling-first` skill Step 1 "不需要建模" 清单的场景（如纯样式/bug fix/机械字段增删）。
+**关键约束**：Epic 流程**不允许跳过建模步骤**。`modeling-first` 作为本 skill 的内嵌硬步骤，产出 `epic-model.md` / `<module>/model.md`。没有建模文件会卡在 DoR。唯一豁免：符合 `modeling-first` skill Step 1 "不需要建模" 清单的场景（如纯样式/bug fix/机械字段增删）。
 
 ### Spec 层流程（每个模块）
 
 ```
+0. 建模（始终执行，豁免需记录理由）           → 调用 modeling-first（全量或增量）
 1. Spec 生成                                → 详见 references/workflow-standard.md#步骤1
 2. 跨 agent 审查 Spec（按复杂度可选）          → 详见 references/workflow-standard.md#步骤1.5
 3. 人工 Spec 审查 + DoR 校验                 → 详见 references/workflow-standard.md#步骤1.6
@@ -91,7 +101,26 @@ metadata:
 11. CI Verification                           → 详见 references/workflow-standard.md#步骤6
 ```
 
-步骤 7、8.5、10、11 始终执行。其余步骤按复杂度调整深度（详见 references/complexity-guide.md）。
+步骤 0、7、8.5、10、11 始终执行。其余步骤按复杂度调整深度（详见 references/complexity-guide.md）。
+
+### 步骤 0 — 建模（详细规则）
+
+调用 `modeling-first` skill 产出/更新建模文件。此步骤是流程内硬步骤，与 `multi-agent-loop` 的集成方式相同。
+
+**全量建模**（目标模块无 `model.md`）：
+- 调用 `modeling-first` 完整模式，从零产出 `<module>/model.md`
+- 产出后经审查（标准模式：人工；Auto 模式：跨 agent 审查）再进入 Spec 层
+
+**增量建模**（目标模块已有 `model.md`）：
+- 评估本次变更是否引入新的领域信息（新实体/关系/不变量/派生关系/状态变化逻辑）
+- 是 → 调用 `modeling-first`，在现有 `model.md` 上增量更新：追加新条目、修正已有条目、补充锚点
+- 否 → 检查是否符合"不需要建模"清单，是则在 DoR 中记录豁免理由并跳过
+
+**增量建模的约束**：
+- 增量更新**必须**通过 `modeling-first` 执行（不得绕过 skill 直接手动编辑 `model.md`）
+- 增量更新后，`model.md` 必须整体满足 `modeling-first` 的质量门槛（不只是新增部分）
+- 已有锚点不得删除或重命名（除非下游所有 `upstream-ref` 同步更新）
+- 增量更新后需重新验证（反向验证、派生验证、复用验证、最小性验证、可引用验证）
 
 ---
 
@@ -102,12 +131,13 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 **禁止中断**：除裁决升级条件外，不得以任何理由暂停流程。
 **禁止简化审查**：每个模块的每个审查步骤必须完整执行跨 agent 审查，不得因"改动小"、"上下文长"等理由降级。
 **Subagent 不替代流程**：subagent 只执行单步任务，不得将多个流程步骤打包；每步必须产出阶段性产物（Spec/Scenario 文件、Decision Log 等），缺产物禁止推进。
-**步骤严格串行**：单个模块内的步骤 1→2→…→13 必须顺序执行，不得并行。原因：每个审查步骤可能触发回退修正，后续步骤依赖前置步骤的审查结果。
+**步骤严格串行**：单个模块内的步骤 0→1→…→13 必须顺序执行，不得并行。原因：每个审查步骤可能触发回退修正，后续步骤依赖前置步骤的审查结果。
 详细规则见 `references/workflow-auto.md`。
 
 ### Spec 层流程（每个模块）
 
 ```
+0. 建模（调用 modeling-first，全量或增量）→ AI 跨 agent 审查建模 → AI 裁决 → Decision Log
 1. Spec 生成（AI 生成）
 2. AI 跨 agent 审查 Spec（强制）→ AI 裁决 → Decision Log
 3. DoR 校验（AI 自检，不满足则升级给用户）
@@ -126,14 +156,14 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 ### Epic 流程
 
 ```
-① [Epic 建模]（modeling-first 轮廓模式 → epic-model.md）
+① [Epic 建模]（modeling-first 轮廓模式 → epic-model.md；已有则增量更新）
 → AI 跨 agent 审查 epic-model（含建模完整性校验）→ AI 裁决 → Decision Log
 → ② Plan 生成（基于 epic-model.md）
 → AI 跨 agent 审查 Plan（含上游对齐校验：聚合不跨模块、契约可追溯）→ AI 裁决 → Decision Log
 → 对每个模块：
-     ③ [模块建模]（modeling-first 完整模式 → <module>/model.md）
+     ③ [模块建模]（调用 modeling-first → <module>/model.md；无则全量，有则增量）
      → AI 跨 agent 审查 模块建模 → AI 裁决 → Decision Log
-     → 独立执行上方 Auto Spec 层流程（每个产出带 upstream-ref）
+     → 独立执行上方 Auto Spec 层流程（步骤 0 已在 ③ 完成，从步骤 1 起继续；每个产出带 upstream-ref）
      → 若模块建模期间发现 epic-model 有误，触发回流（详见 workflow-epic.md "迭代回流规则"）
 → 输出汇总 Decision Report（建模级 + Plan 级 + 各模块级，含 Upstream Coverage Matrix）
 ```
@@ -220,9 +250,9 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 - ✅ 业务规则已定义（含已知边界规则）
 - ✅ 范围有界
 - ✅ 依赖项已知
-- ✅ **建模文件已就绪**（本模块/本 Epic 的领域真理源）——满足以下任一：
-  - 已产出 `model.md`（单模块）或 `epic-model.md`（Epic）+ 所属各 `<module>/model.md`，经 `modeling-first` skill 产出
-  - 或明确记录"本阶段无需建模"的理由，且场景符合 `modeling-first` 的"不需要建模"清单（Step 1）
+- ✅ **建模文件已就绪**（本模块/本 Epic 的领域真理源）——由步骤 0 保证，满足以下任一：
+  - 已通过 `modeling-first` 产出/增量更新 `model.md`（单模块）或 `epic-model.md`（Epic）+ 所属各 `<module>/model.md`
+  - 或在步骤 0 明确记录"本阶段无需建模"的豁免理由，且场景符合 `modeling-first` 的"不需要建模"清单（Step 1）
 - ✅ **建模文件可引用**：每条实体/关系/不变量/派生关系/聚合都带 **`<!-- anchor: <Namespace>.<Name> -->` HTML 注释形式的显式锚点**（命名空间：`Entity` / `Rel` / `Invariant` / `Derivation` / `Aggregate` / `SharedInvariant`）。机械校验只认这种形式；heading / bold / 纯节标题**不被接受**。供下游产出标注 `upstream-ref`
 
 如不清楚，AI 必须提出澄清问题。
@@ -254,6 +284,7 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 
 | 文档                                                                                         | 何时读取                                               |
 | -------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [modeling-first/SKILL.md](../modeling-first/SKILL.md)                                        | 执行步骤 0 建模时（全量或增量）                        |
 | [references/workflow-standard.md](./references/workflow-standard.md)                         | 执行标准模式各步骤时                                   |
 | [references/workflow-auto.md](./references/workflow-auto.md)                                 | 执行 Auto 模式时（裁决规则、Decision Log/Report 格式） |
 | [references/workflow-epic.md](./references/workflow-epic.md)                                 | 处理 Epic 需求时（Plan 格式、Review 检查点）           |

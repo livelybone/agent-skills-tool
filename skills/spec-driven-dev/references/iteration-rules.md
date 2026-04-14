@@ -46,7 +46,7 @@
 
 ## Test / Feature 实现时发现模块间契约冲突
 
-→ 停止实现 → 确认根因是 Plan 的契约定义有歧义（而非单模块 Spec 问题）→ 人修订 Plan 中相关模块的"产出契约"→ 受影响模块重新走 Spec → Scenario → Test → Feature
+→ 停止实现 → 确认根因是 Plan 的契约定义有歧义（而非单模块 Spec 问题）→ 人修订 Plan 中相关模块的"产出契约"→ 受影响模块重新走 Model（增量更新）→ Spec → Scenario → Test → Feature
 
 ## 建模（model.md / epic-model.md）回修后的追溯产物失效
 

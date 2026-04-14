@@ -10,7 +10,7 @@ metadata:
 
 > **背景**：LLM 默认用模式匹配方式实现需求（见到"列表页" → 套"表格+分页+筛选"模板），而非建模方式。结果是同一概念多处重复实现、应派生的值被当独立输入、与现有抽象平行新建相似概念。本 skill 强制在写代码前产出**最小领域模型**，把 LLM 从模式匹配切到建模模式。
 
-> **与 `spec-driven-dev` 的关系**：本 skill 是 `spec-driven-dev` 的硬依赖——所有 Epic/模块进入 Plan/Spec 前必须由本 skill 产出 `epic-model.md` / `model.md` 作为领域真理源，下游 `upstream-ref` 均指向本 skill 产出的锚点。本 skill 本身保持为原子 skill，可独立使用；编排由 `spec-driven-dev` 负责，本 skill 不越权。
+> **与 `spec-driven-dev` 的关系**：本 skill 是 `spec-driven-dev` 流程内的**硬步骤**（步骤 0）——与 `multi-agent-loop` 的集成方式相同，由 `spec-driven-dev` 直接调用。支持全量建模（从零产出）和增量建模（在已有 `model.md` 上追加/修改条目）。下游 `upstream-ref` 均指向本 skill 产出的锚点。本 skill 本身保持为原子 skill，可独立使用；编排由 `spec-driven-dev` 负责，本 skill 不越权。
 
 ## 适用场景
 

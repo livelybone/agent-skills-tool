@@ -9,7 +9,10 @@
 
 Plan 无法独立判断模块边界——没有建模文件就会按技术直觉切，结果通常破坏聚合边界（例如把 `Order` 和 `OrderItem` 切到两个模块）。
 
-因此 Plan 之前必须调用 `modeling-first` 轮廓模式产出 `epic-model.md`。
+因此 Plan 之前必须调用 `modeling-first` 产出/更新 `epic-model.md`：
+
+- **无 `epic-model.md`** → 全量建模（轮廓模式）
+- **已有 `epic-model.md`**（如 Epic 扩展、二期需求）→ 增量建模：在现有文件上追加新聚合/关系/共享不变量/锚点，经审查后继续 Plan
 
 ### 产物要求（Epic 级）
 
@@ -76,11 +79,11 @@ Epic 需求
 [Human Plan Review]（确认边界合理、依赖正确、契约完整、与 epic-model 一致）
   ↓
 按依赖顺序，对每个模块：
-  [模块建模]（modeling-first 完整模式 → <module>/model.md）
+  [模块建模]（调用 modeling-first → <module>/model.md；无则全量，有则增量）
        │  约束：引用 epic-model.md 的共享实体，不重定义
        │  若发现 epic-model.md 有误 → 回到 Epic 层修正 → 重走 Plan
     ↓
-  [Spec → Review → Scenario → ... → Impl → CI]（完整步骤见 SKILL.md）
+  [Model → Spec → Review → Scenario → ... → Impl → CI]（完整步骤见 SKILL.md）
        │  DoR 消费：本模块 <module>/model.md
        │  每个产出带 upstream-ref，指向建模条目的锚点
 

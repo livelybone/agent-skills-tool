@@ -1,5 +1,34 @@
 # 标准模式工作流详细步骤
 
+## 步骤 0 — 建模（始终执行，豁免需记录理由）
+
+调用 `modeling-first` skill 产出或增量更新建模文件。此步骤是流程内硬步骤，不可跳过（除非符合豁免条件）。
+
+### 全量建模
+
+目标模块尚无 `model.md` → 调用 `modeling-first` 完整模式，从零产出 `<module>/model.md`。
+
+### 增量建模
+
+目标模块已有 `model.md` 且本次变更引入新的领域信息（新实体/关系/不变量/派生关系/状态变化逻辑）→ 调用 `modeling-first`，在现有 `model.md` 上增量更新。
+
+增量建模约束：
+- **必须通过 `modeling-first` 执行**，不得绕过 skill 直接手编 `model.md`
+- 更新后 `model.md` 必须整体满足 `modeling-first` 质量门槛
+- 已有锚点不得删除或重命名（除非下游 `upstream-ref` 同步更新）
+- 更新后重新验证（反向、派生、复用、最小性、可引用）
+
+### 豁免
+
+本次变更符合 `modeling-first` SKILL.md Step 1 "不需要建模"清单 → 在 DoR 中记录豁免理由，跳过此步骤。
+
+### 审查
+
+- 标准模式：人工审查建模产物
+- Auto 模式：跨 agent 审查（见 SKILL.md > 跨 Agent 审查原则，prompt 模板见 `prompt-upstream-review.md`）
+
+---
+
 ## 步骤 1 — 编写 Spec
 
 人或 AI 创建结构化 markdown 规范，描述系统行为。
