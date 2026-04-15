@@ -65,7 +65,7 @@ bash scripts/detect-clones.sh --scope=full --min-lines=3 --min-tokens=30
    - 若无必要勿增实体：每个新增 prop/参数/配置字段/wrapper 层/抽象层/style override，问"去掉它会 break 什么"
    - 找到底层规则，派生一切：多个值之间有数学/逻辑关系的（UI、配置、领域参数、API 输入均适用），只暴露根变量
    - 参考 `references/review-guide.md` 中的模式 5、6
-   - **建模对齐检查**：如果变更涉及领域实体/关系/不变量/派生关系，或对现有实体引入状态变化逻辑（与 `modeling-first` skill 触发条件一致），查找对应的 `model.md`（通常在 `docs/models/` 或 feature 目录）；若存在，确认实现未偏离模型；若不存在但本应存在，记录为 Major 并建议补建模
+   - **建模对齐检查**：如果变更涉及领域实体/关系/不变量/派生关系，或对现有实体引入状态变化逻辑（与 `modeling-first` skill 触发条件一致），查找对应的 `model.md`（通常在 `docs/models/` 或 feature 目录）；若存在，确认实现未偏离模型；若不存在但本应存在，记录为 Major 并建议补建模。**注意**：若本次 review 是在 `spec-driven-dev` 流程的 CI 验证阶段（步骤 11.3）中被调用，跳过本项——upstream coverage gate 已对建模追溯做了更严格的机械校验
 
 4. **结构性问题扫描**（LLM 在阅读代码时顺带检查，无独立脚本）
    - 文件/函数是否超长（文件 > 300 行，函数 > 50 行）

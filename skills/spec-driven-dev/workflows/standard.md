@@ -242,3 +242,4 @@ AI 在以下约束下实现功能：
 - snapshot validation
 - benchmark checks
 - migration safety
+- **code-review**（结构质量检查）：调用 `code-review` skill，`--scope=diff`，检测实现引入的克隆、意图级重复、设计质量问题。若报告中存在 HIGH 级 action item，升级给人工确认后再合并。注意：`code-review` 的"建模对齐检查"在本流程中跳过（upstream coverage gate 已做更严格的机械校验）
