@@ -236,10 +236,25 @@ AI 在以下约束下实现功能：
 
 > coverage gate 和 mutation score gate 的具体配置、阈值策略、打回修复流程由 `test-quality-gate` skill 提供。若项目尚未配置这两项 CI，在 CI Verification 步骤触发 `test-quality-gate` 的配置补全流程。
 
-### 11.3 可选检查
+### 11.3 code-review 结构质量检查
+
+按复杂度决定是否执行（见 `guides/complexity.md`）。
+
+调用 `code-review` skill，`--scope=diff`，检测实现引入的克隆、意图级重复、设计质量问题。
+
+**与 upstream coverage gate 的分工**：`code-review` 的"建模对齐检查"中，ref 存在性验证（`upstream-ref` 指向的文件/行号是否真实存在）由 upstream coverage gate（11.2）覆盖，在本流程中跳过；语义对齐验证（实现是否偏离 `model.md` 声明的实体/关系/不变量语义）仍由 `code-review` 执行。
+
+**门槛与修复闭环**：
+
+- **HIGH 级问题**：必须修复。修复后重跑 11.2，确认未引入回归，然后重跑 code-review 确认 HIGH 已消除
+- **MEDIUM 级问题**：记录到 PR 描述或 Decision Log（Auto 模式），由人决定是否修复，不阻塞流程
+- **LOW 级问题**：记录即可
+
+> **修复范围约束**：修复 code-review 发现的问题时，仅限于消除检出的重复/冗余，不得借机做超出 Spec 范围的重构。若修复不可避免地涉及 Spec 外代码，记录影响范围并升级给人工确认。
+
+### 11.4 可选检查
 
 - contract validation
 - snapshot validation
 - benchmark checks
 - migration safety
-- **code-review**（结构质量检查）：调用 `code-review` skill，`--scope=diff`，检测实现引入的克隆、意图级重复、设计质量问题。若报告中存在 HIGH 级 action item，升级给人工确认后再合并。注意：`code-review` 的"建模对齐检查"在本流程中跳过（upstream coverage gate 已做更严格的机械校验）
