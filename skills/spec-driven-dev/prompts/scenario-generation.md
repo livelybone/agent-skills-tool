@@ -12,7 +12,9 @@
 ## 必须输入（硬性前提）
 
 - Spec（业务规范）
-- **建模文件**（`model.md` / `epic-model.md`，由 `modeling-first` 产出）——**必须提供**。若建模文件缺失，停止场景生成，向人工报告"建模未就绪，无法生成场景"，不得凭空生成
+- **建模文件**（`docs/models/<scenario>/<name>.md`，由 `modeling-first` v0.3+ 产出）——**必须提供本模块涉及的全部建模单元**。
+  - **豁免分支**：若 Spec frontmatter 含已通过独立审查的 `modeling_exemption` 字段（详见 SKILL.md 步骤 0"建模豁免"），允许无建模文件；此时场景的 `upstream-ref` 全部标 `N/A + <具体理由引用 modeling_exemption.rationale>`
+  - **非豁免情况**：若建模文件缺失且 frontmatter 无合法 `modeling_exemption`，停止场景生成，向人工报告"建模未就绪，无法生成场景"，不得凭空生成
 
 ## 要求
 

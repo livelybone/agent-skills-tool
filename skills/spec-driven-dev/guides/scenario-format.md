@@ -14,20 +14,20 @@
 ↑ upstream-ref: <上游契约锚点>
 ```
 
-示例（upstream 为 model.md）：
+示例（upstream 为 `docs/models/domain/order.md`）：
 
 ```
 [INTEGRATION] 用户创建未付款订单
 → 订单状态变为 CREATED
-↑ upstream-ref: model.md#Invariant.Order.2
+↑ upstream-ref: domain/order.md#Invariant.Order.2
 
 [INTEGRATION] 用户支付现有订单
 → 订单状态变为 PAID
-↑ upstream-ref: model.md#Invariant.Order.4
+↑ upstream-ref: domain/order.md#Invariant.Order.4
 
 [CRITICAL][INTEGRATION] 用户取消已发货订单
 → 取消失败
-↑ upstream-ref: model.md#Invariant.Order.5
+↑ upstream-ref: domain/order.md#Invariant.Order.5
 ```
 
 不要输出测试函数名（如 `test_cancel_shipped_order_should_fail`）。

@@ -2,7 +2,7 @@
 name: spec-driven-dev
 description: 强制执行规范驱动的 AI 开发工作流。所有开发需求走 Model → Spec → Scenarios → Tests → Implementation → CI 全流程。Epic 级需求先 Plan（模块拆解 + 依赖图 + 契约定义），再对每个模块独立走完整流程。支持 Auto 模式（--auto）：全流程自动化，AI 审查裁决，结束后输出 Decision Report。触发词：spec、plan、epic、模块拆解、开发规范、需求拆分、--auto。
 metadata:
-  version: 3.0
+  version: 3.1
   tags:
     - ai-workflow
     - spec-driven
@@ -16,13 +16,19 @@ metadata:
 
 ## 建模集成
 
-本 skill 将 `modeling-first`（原子 skill）作为流程内的**硬步骤**——与 `multi-agent-loop` 的集成方式相同：流程中直接调用，不可跳过。
+本 skill 将 `modeling-first`（v0.3+，原子 skill）作为流程内的**硬步骤**——与 `multi-agent-loop` 的集成方式相同：流程中直接调用，不可跳过。
 
-- **全量建模**：目标模块尚无 `model.md`（或 Epic 尚无 `epic-model.md`）→ 调用 `modeling-first` 完整/轮廓模式从零产出
-- **增量建模**：目标模块已有 `model.md` 且本次变更需要新增/修改领域信息 → 调用 `modeling-first` 在现有文件上增量更新（追加实体/关系/不变量/派生关系/锚点），经审查后继续 Spec 层
-- **豁免**：本次变更符合 `modeling-first` SKILL.md Step 1 "不需要建模"清单（纯样式/bug fix/机械字段增删等）→ 在 DoR 中记录豁免理由，跳过建模步骤
+**建模产物路径**：`docs/models/<scenario>/<name>.md`，其中 `<scenario>` ∈ `{domain, ui, components, process, state-machine}`（5 个固定 scenario，不允许扩展），`<name>` 是 kebab-case。旧的 `<module>/model.md` 与 `epic-model.md` 已由 `modeling-first` v0.3 废弃，本 skill 与之硬耦合。
 
-`modeling-first` 方法论与模板（Entity/Rel/Invariant/Derivation/Aggregate/SharedInvariant 锚点命名空间）由其 SKILL 定义；本 skill 负责调用、消费产物、执行流程编排与机械校验。
+**三种调用形态**：
+
+- **全量建模**：目标建模单元尚无 `docs/models/<scenario>/<name>.md` → 调用 `modeling-first` 完整模式从零产出
+- **增量建模**：目标建模单元已有对应文件且本次变更需要新增/修改领域信息 → 调用 `modeling-first` 在现有文件上增量更新（追加实体/关系/不变量/派生关系/锚点），经审查后继续 Spec 层
+- **豁免**：本次变更符合 `modeling-first` SKILL.md Step 1 "不需要建模"清单（纯样式/bug fix/机械字段增删等）→ 在 Spec frontmatter 记录 `modeling_exemption` 字段并经独立审查通过，才可跳过建模步骤（详见下方"步骤 0 — 建模"节的"建模豁免"小节）
+
+**多单元需求**：需求跨多个建模单元（如 `domain/orders` + `domain/payments` + `ui/orders`）时，`modeling-first` 在一次调用内依次产出所有受影响单元的文件。Epic 流程正是通过这一能力消化跨聚合的建模。
+
+`modeling-first` 方法论与模板（各 scenario 可用的锚点命名空间、内联/完整模式边界、漂移对齐规则等）由其 SKILL 定义；本 skill 负责调用、消费产物、执行流程编排与机械校验。锚点命名空间的当前参考清单（按 scenario 划分）见 `guides/upstream-ref.md`——机械校验只做形状校验（大驼峰前缀 + `.` + 名字）+ 存在性校验，命名空间扩展不需改脚本。
 
 ## 核心原则
 
@@ -69,19 +75,30 @@ metadata:
 ### Epic 流程
 
 ```
-① [Epic 建模] 调用 modeling-first 轮廓模式 → epic-model.md
-   产出：实体 + 关系 + 聚合边界 + 跨聚合共享不变量
-→ ② Plan（模块拆解 + 依赖图 + 契约，基于 epic-model.md）→ 详见 workflows/epic.md
-→ ③ Human Plan Review（含上游对齐校验：聚合不跨模块、契约可追溯到 epic-model）
-→ 对每个模块（按依赖顺序，可并行）：
-     ④ [模块建模] 调用 modeling-first → <module>/model.md
-        - 无 model.md → 全量建模（完整模式）
-        - 已有 model.md → 增量建模（在现有文件上追加/修改条目）
-        产出：完整实体 + 派生关系 + 不变量 + Reuse Check
-     → ⑤ 独立执行 Spec 层流程（每个产出条目必须带 upstream-ref 指向建模锚点）
+① [多单元建模] 调用 modeling-first（"多模块需求的处理"流程）
+   → 识别所有受影响的建模单元（<scenario>/<name> 组合）
+   → 产出切分提议（含依赖顺序）
+   → 按顺序逐个产出 docs/models/<scenario>/<name>.md
+   产出：跨聚合的完整实体/关系/派生/不变量/状态机/流程/组件 + 显式锚点
+→ ② Plan（基于产出的建模文件做模块拆解）→ 详见 workflows/epic.md
+   - 每个 Plan 模块"持有"若干建模单元的聚合（`domain/<name>.md#Aggregate.<Name>`）
+   - 模块依赖/产出契约引用 `Rel.*` 锚点。按 `modeling-first` 权威规则（`references/cross-module.md`），**跨模块关系写在引用方单元**的 Relationships 章节——引用方通常是 `domain/<name>.md`，也可以是 `process/<name>.md`（流程与实体的关系在 process 单元声明）
+→ ③ Human Plan Review
+   - 机械校验 `scripts/check-plan-structure.sh` + `scripts/check-upstream-coverage.sh` 须先通过
+   - 人工确认聚合不跨模块、契约完整、依赖无循环
+→ 对每个模块（按 Plan 的依赖顺序，可并行）：
+     ④ 如有后续领域增量（实现过程中发现遗漏），调用 modeling-first 增量更新对应建模单元
+        → 若影响聚合边界或跨模块契约，触发 Plan 回流（见 workflows/epic.md"迭代回流规则"）
+     → ⑤ 独立执行 Spec 层流程（每个下游产出带 upstream-ref 指向对应建模锚点）
 ```
 
-**关键约束**：Epic 流程**不允许跳过建模步骤**。`modeling-first` 作为本 skill 的内嵌硬步骤，产出 `epic-model.md` / `<module>/model.md`。没有建模文件会卡在 DoR。唯一豁免：符合 `modeling-first` skill Step 1 "不需要建模" 清单的场景（如纯样式/bug fix/机械字段增删）。
+**关键约束**：Epic 流程**不允许跳过建模步骤**。`modeling-first` 作为本 skill 的内嵌硬步骤，产出 `docs/models/<scenario>/<name>.md`。没有建模文件会卡在 DoR。唯一豁免：符合 `modeling-first` skill Step 1 "不需要建模" 清单的场景（如纯样式/bug fix/机械字段增删），且走下方"建模豁免（反 rationalization 硬程序）"。
+
+**与旧 v2 的差异**（必读）：旧版需要产出 `epic-model.md` + 各模块 `<module>/model.md` 的**两层建模**。v3+ 只有一层建模——所有单元都以 `docs/models/<scenario>/<name>.md` 形式产出，跨模块概念下沉到模块：
+- 跨模块不变量 → **执行者模块**（`Invariant.*.cross.*`）
+- 跨模块关系 → **引用方单元**的 `Rel.*` 锚点（含契约线索 event/ref/cmd/snapshot）
+
+Plan 直接消费这些单元，不再需要 Epic 级轮廓模型。
 
 ### Spec 层流程（每个模块）
 
@@ -107,26 +124,49 @@ metadata:
 
 调用 `modeling-first` skill 产出/更新建模文件。此步骤是流程内硬步骤，与 `multi-agent-loop` 的集成方式相同。
 
-**全量建模**（目标模块无 `model.md`）：
-- 调用 `modeling-first` 完整模式，从零产出 `<module>/model.md`
+**全量建模**（本模块对应的建模单元文件不存在）：
+- 调用 `modeling-first` 完整模式，从零产出 `docs/models/<scenario>/<name>.md`（可能一次调用产出多个单元，若本模块涉及跨 scenario）
 - 产出后经审查（标准模式：人工；Auto 模式：跨 agent 审查）再进入 Spec 层
 
-**增量建模**（目标模块已有 `model.md`）：
+**增量建模**（建模单元文件已存在）：
+- 先做漂移对齐（对照当前代码，确认 md 反映真实状态；若有漂移先修 md，见 `modeling-first/references/placement.md` "漂移对齐规则"）
 - 评估本次变更是否引入新的领域信息（新实体/关系/不变量/派生关系/状态变化逻辑）
-- 是 → 调用 `modeling-first`，在现有 `model.md` 上增量更新：追加新条目、修正已有条目、补充锚点
-- 否 → 检查是否符合"不需要建模"清单，是则在 DoR 中记录豁免理由并跳过
+- 是 → 调用 `modeling-first`，在现有文件上增量更新：追加新条目、修正已有条目、补充锚点
+- 否 → 走下方"建模豁免"程序
 
 **增量建模的约束**：
-- 增量更新**必须**通过 `modeling-first` 执行（不得绕过 skill 直接手动编辑 `model.md`）
-- 增量更新后，`model.md` 必须整体满足 `modeling-first` 的质量门槛（不只是新增部分）
-- 已有锚点不得删除或重命名（除非下游所有 `upstream-ref` 同步更新）
-- 增量更新后需重新验证（反向验证、派生验证、复用验证、最小性验证、可引用验证）
+- 增量更新**必须**通过 `modeling-first` 执行（不得绕过 skill 直接手动编辑建模文件）
+- 增量更新后，整个建模文件必须满足 `modeling-first` 的质量门槛（不只是新增部分）
+- 已有锚点不得删除或重命名（除非下游所有 `upstream-ref` 同步更新——这需升级用户）
+- 增量更新后需重新验证（反向验证、派生验证、复用验证、跨模块验证、最小性验证、可引用验证）
+
+**建模豁免（反 rationalization 硬程序）**：
+
+本次变更若符合 `modeling-first/SKILL.md` 的"跳过（直接进入实现）"清单（单函数 bug fix、纯视觉调整、文案/国际化、纯技术重构、机械性字段增删、升级依赖/配置变更），才可豁免建模。但**豁免理由必须经独立审查确认**，不得由执行 agent 自裁。
+
+1. **结构化记录**：豁免不得写成散文，必须在 Spec frontmatter 中以结构化字段记录：
+
+   ```yaml
+   modeling_exemption:
+     clause: <引用 modeling-first 跳过清单中的具体类别>
+     clause_source: modeling-first/SKILL.md:<具体行号>
+     rationale: <解释本次变更为什么属于该类别——必须具体，不接受"改动小/简单/显然"这类模糊措辞>
+     evidence: <指向变更范围的证据：涉及文件路径清单、diff 规模、明确不触及的建模条目清单>
+   ```
+
+2. **独立审查**：
+   - **标准模式**：人工 Spec 审查时必须显式确认豁免理由（审查清单见 `prompts/spec-review.md` 的"建模豁免质疑"节），人不通过则卡在 DoR
+   - **Auto 模式**：必须通过 `multi-agent-loop` 启动**独立一轮跨 agent 审查**（Auto 模式默认使用 `opencode` agent，见下方"跨 Agent 审查原则"），使用 `prompts/exemption-review.md` 作为审查任务。审查发现"理由不充分 / 变更实际触及建模条目 / 引用清单类别不匹配"任一即回退建模步骤
+
+3. **升级边界**：若审查发现变更实际触及任一类建模条目（新增/修改 Entity / Rel / Invariant / Derivation / Aggregate / StateMachine / Process / Component 中任一，或跨模块不变量 `Invariant.*.cross.*`——即 `guides/upstream-ref.md` 按 scenario 划分的全部命名空间），必须升级用户并回退到全量或增量建模，不得由 agent 自裁继续豁免。
 
 ---
 
 ## Auto 模式流程
 
 Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替换为 AI 跨 agent 审查 + AI 裁决。
+
+**默认跨 agent 审查 agent**：**`opencode`**（通过 `multi-agent-loop` 的 `run_agent.sh --agent=opencode` 启动）。这是 Auto 模式的默认选择——若环境中 opencode 不可用（CLI 缺失、API 超时超过重试阈值），按"客观技术故障的处理"流程处理（见 `workflows/auto.md`）。
 
 **禁止中断**：除裁决升级条件外，不得以任何理由暂停流程。
 **禁止简化审查**：每个模块的每个审查步骤必须完整执行跨 agent 审查，不得因"改动小"、"上下文长"等理由降级。
@@ -137,14 +177,14 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 ### Spec 层流程（每个模块）
 
 ```
-0. 建模（调用 modeling-first，全量或增量）→ AI 跨 agent 审查建模 → AI 裁决 → Decision Log
+0. 建模（调用 modeling-first，全量或增量）→ AI 跨 agent 审查建模（opencode）→ AI 裁决 → Decision Log
 1. Spec 生成（AI 生成）
-2. AI 跨 agent 审查 Spec（强制）→ AI 裁决 → Decision Log
+2. AI 跨 agent 审查 Spec（强制，opencode）→ AI 裁决 → Decision Log
 3. DoR 校验（AI 自检，不满足则升级给用户）
 4. Scenario 生成
-5. AI 跨 agent 审查 Scenario（强制）→ AI 裁决 → Decision Log
+5. AI 跨 agent 审查 Scenario（强制，opencode）→ AI 裁决 → Decision Log
 6. Test Implementation（含 Implementation Stub）
-7. AI 跨 agent 审查 Test（强制）→ AI 裁决 → Decision Log
+7. AI 跨 agent 审查 Test（强制，opencode）→ AI 裁决 → Decision Log
 8. Red Run（审查通过后执行，确认全部红色）
 9. Baseline Test Run（记录当前失败列表）
 10. Feature Implementation
@@ -156,22 +196,24 @@ Auto 模式保留标准模式的**所有执行步骤**，仅将 Human Review 替
 ### Epic 流程
 
 ```
-① [Epic 建模]（modeling-first 轮廓模式 → epic-model.md；已有则增量更新）
-→ AI 跨 agent 审查 epic-model（含建模完整性校验）→ AI 裁决 → Decision Log
-→ ② Plan 生成（基于 epic-model.md）
-→ AI 跨 agent 审查 Plan（含上游对齐校验：聚合不跨模块、契约可追溯）→ AI 裁决 → Decision Log
+① [多单元建模]（调用 modeling-first"多模块需求的处理"流程，一次产出所有受影响单元；已有则对每个单元走增量建模 + 漂移对齐）
+→ AI 跨 agent 审查建模（opencode，审查每个产出单元的完整性 + 单元间协同一致性）→ AI 裁决 → Decision Log
+→ ② Plan 生成（基于各建模单元的 Aggregate/Rel 锚点拆解模块）
+→ 机械校验（check-plan-structure.sh + check-upstream-coverage.sh）
+→ AI 跨 agent 审查 Plan（opencode，含上游对齐校验：聚合不跨模块、契约可追溯）→ AI 裁决 → Decision Log
 → 对每个模块：
-     ③ [模块建模]（调用 modeling-first → <module>/model.md；无则全量，有则增量）
-     → AI 跨 agent 审查 模块建模 → AI 裁决 → Decision Log
-     → 独立执行上方 Auto Spec 层流程（步骤 0 已在 ③ 完成，从步骤 1 起继续；每个产出带 upstream-ref）
-     → 若模块建模期间发现 epic-model 有误，触发回流（详见 workflows/epic.md "迭代回流规则"）
-→ 输出汇总 Decision Report（建模级 + Plan 级 + 各模块级，含 Upstream Coverage Matrix）
+     ③ 如需领域增量，调用 modeling-first 增量更新对应建模单元
+        → AI 跨 agent 审查（opencode）→ AI 裁决
+        → 若触发 Plan 回流，按 workflows/epic.md"迭代回流规则"处理
+     → 独立执行上方 Auto Spec 层流程（从步骤 1 起；每个产出带 upstream-ref）
+→ 输出汇总 Decision Report（多单元建模级 + Plan 级 + 各模块级，含 Upstream Coverage Matrix）
 ```
 
-**Auto 模式下跨 agent 审查**：**必须且只能**通过 `multi-agent-loop` skill 启动——审查任务使用 **agent 角色**（独立 agent 执行审查这项任务）；**peer 角色仅用于对已有 agent 产出做第二视角挑战**（见 `multi-agent-loop/SKILL.md`）。详细工具级约束见下方"跨 Agent 审查原则"节。
+**Auto 模式下跨 agent 审查**：**必须且只能**通过 `multi-agent-loop` skill 启动（默认 agent=opencode）——审查任务使用 **agent 角色**（独立 agent 执行审查这项任务）；**peer 角色仅用于对已有 agent 产出做第二视角挑战**（见 `multi-agent-loop/SKILL.md`）。详细工具级约束见下方"跨 Agent 审查原则"节。
 
 各阶段审查任务的 prompt 模板：
-- 建模审查（epic-model / model）：`prompts/upstream-review.md`
+- 建模审查（每个 `<scenario>/<name>.md` 单元）：`prompts/upstream-review.md`
+- 建模豁免审查（步骤 0 豁免成立性审查）：`prompts/exemption-review.md`
 - Plan 审查：`prompts/plan-review.md`
 - Spec 审查：`prompts/spec-review.md`
 - Scenario 审查：`prompts/scenario-review.md`
@@ -239,12 +281,13 @@ last_completed_step_name: Scenario Review
 context_summary: |
   Spec 已审查通过，3 条 Rule。Scenario 12 个，含 2 个 CRITICAL。
   审查轮次：Spec 2轮，Scenario 1轮，均无 Major。
-decision_log_ref: $TMPDIR/spec-driven-dev-1713072000/decision-log.md
 updated: 2026-04-14T10:30
 ---
 ```
 
-**Epic 级**：`plan.md` 尾部追加宏观进度索引，每个模块一行。详细上下文（`context_summary`、`decision_log_ref`）仍在各模块的 `spec/<module>.md` frontmatter 中：
+> **为什么不写 `decision_log_ref`**：Auto 模式的 Decision Log 在 `$TMPDIR/spec-driven-dev-<session-id>/decision-log.md`，`$TMPDIR` 路径会话结束后失效，写进被 commit 的 spec 文件即成死引用，且违反 `workflows/auto.md` 的"禁止仓库持久化"规则。续接时按约定位置 `$TMPDIR/spec-driven-dev-*/` 搜索最新目录；若 OS 已清理则以产物（Spec / Scenario / Test 文件）为准恢复上下文，不阻塞继续执行。
+
+**Epic 级**：`plan.md` 尾部追加宏观进度索引，每个模块一行。详细上下文（`context_summary`）在各模块的 `spec/<module>.md` frontmatter 中：
 
 ```markdown
 ## Progress
@@ -262,7 +305,7 @@ updated: 2026-04-14T10:30
 
 1. **定位**：读 `plan.md` 尾部 Progress 表（Epic）或 `spec/<module>.md` frontmatter（单模块），确定当前模块和步骤
 2. **恢复上下文**：读该模块 `spec/<module>.md` frontmatter 的 `context_summary`（裁决摘要、审查状态、已知问题）
-3. **恢复 Decision Log**：读 `decision_log_ref` 指向的 `$TMPDIR` 文件（若已被 OS 清理则标记为"Decision Log 已丢失，仅以产物为准"，不阻塞继续执行）
+3. **恢复 Decision Log**：按约定位置 `$TMPDIR/spec-driven-dev-*/decision-log.md` 搜索最新会话目录（frontmatter 不记录路径，避免仓库持久化 `$TMPDIR`）。若已被 OS 清理则标记为"Decision Log 已丢失，仅以产物为准"，不阻塞继续执行
 4. **继续执行**：`status: in_progress` 从该步骤头重做，`last_completed_step` 之后的步骤正常推进
 
 ### Context 压力处理
@@ -290,13 +333,16 @@ updated: 2026-04-14T10:30
 
 ### 跨 Agent 审查原则
 
-本文档中所有"跨 agent 审查"均指：**使用 `multi-agent-loop` skill 启动一个独立的审查进程**。优先选择与当前 coding agent 不同的 agent（如当前是 Claude 则启动 Codex/OpenCode），以获得独立视角。若环境中不存在其他可用的 coding agent，允许使用同一 agent 但必须通过 `multi-agent-loop` 启动独立进程，确保审查上下文与执行上下文隔离。
+本文档中所有"跨 agent 审查"均指：**使用 `multi-agent-loop` skill 启动一个独立的审查进程**。
 
-**工具级约束**：跨 agent 审查**必须且只能**通过 `multi-agent-loop` skill（即 `run_agent.sh`）启动。**禁止使用 Agent tool（subagent）替代**——Agent tool 启动的 subagent 与当前会话共享模型和上下文来源，不构成独立审查。即使 subagent 的上下文是隔离的，它仍然不等于 `multi-agent-loop` 的跨进程审查。
+**Auto 模式默认使用 `opencode`** 作为审查 agent（通过 `run_agent.sh --agent=opencode` 启动）；标准模式按复杂度选用（可 claude / opencode / codex 任一）。优先选择与当前 coding agent 不同的 agent（如当前是 Claude 则启动 opencode/codex），以获得独立视角。若环境中不存在其他可用的 coding agent，允许使用同一 agent 但必须通过 `multi-agent-loop` 启动独立进程，确保审查上下文与执行上下文隔离。
+
+**工具级约束**：跨 agent 审查**必须且只能**通过 `multi-agent-loop` skill 启动（具体用法见该 skill 的 SKILL.md）。**禁止使用 Agent tool（subagent）替代**——Agent tool 启动的 subagent 与当前会话共享模型和上下文来源，不构成独立审查。即使 subagent 的上下文是隔离的，它仍然不等于 `multi-agent-loop` 的跨进程审查。
 
 执行要点：
 
-- **优先异构**：审查 agent 优先选择与当前执行 agent 不同的 agent；无可用异构 agent 时，使用同一 agent 但必须通过 `multi-agent-loop`（`run_agent.sh`）启动独立进程
+- **优先异构**：审查 agent 优先选择与当前执行 agent 不同的 agent；无可用异构 agent 时，使用同一 agent 但必须通过 `multi-agent-loop` 启动独立进程
+- **Auto 模式默认 opencode**：Auto 模式所有跨 agent 审查默认以 `opencode` 为审查 agent；客观技术故障（见 `workflows/auto.md`）时才切换到其他 agent 或按降级流程处理
 - **使用 agent 角色**：跨 agent 审查是"执行审查任务"，必须使用 `multi-agent-loop` 的 **agent 角色**（非 peer）。peer 角色仅在需要挑战 agent 已有结论时使用。任务文件必须命名为 `agent-task.md`（遵循 `multi-agent-loop` 文件协议），不得使用自定义文件名
 - **轮次隔离**：每一轮审查都必须使用新的 `task-name`，不得复用上一轮目录。推荐命名为 `<step>-<module>-r1`、`<step>-<module>-r2`、`<step>-<module>-r3`
 - **controller 裁决**：审查 agent 只输出结构化发现，controller（当前 agent）逐条裁决，不盲信
@@ -317,17 +363,18 @@ updated: 2026-04-14T10:30
 - ✅ 范围有界
 - ✅ 依赖项已知
 - ✅ **建模文件已就绪**（本模块/本 Epic 的领域真理源）——由步骤 0 保证，满足以下任一：
-  - 已通过 `modeling-first` 产出/增量更新 `model.md`（单模块）或 `epic-model.md`（Epic）+ 所属各 `<module>/model.md`
-  - 或在步骤 0 明确记录"本阶段无需建模"的豁免理由，且场景符合 `modeling-first` 的"不需要建模"清单（Step 1）
-- ✅ **建模文件可引用**：每条实体/关系/不变量/派生关系/聚合都带显式锚点（格式和命名空间见 `guides/upstream-ref.md`）。供下游产出标注 `upstream-ref`
+  - 已通过 `modeling-first` 产出/增量更新本模块涉及的每个建模单元（`docs/models/<scenario>/<name>.md`）
+  - 或走完"建模豁免"硬程序（结构化 frontmatter 字段 + 独立审查通过——详见步骤 0 的"建模豁免"小节）。Auto 模式下豁免必须经 `prompts/exemption-review.md` 跨 agent 审查通过；标准模式下豁免必须经人工 Spec 审查时显式确认
+- ✅ **建模文件可引用**：每条实体/关系/不变量/派生关系/聚合/状态机/流程/组件（及跨模块不变量 `Invariant.*.cross.*`）都带显式锚点（按 scenario 划分的命名空间格式见 `guides/upstream-ref.md`）。供下游产出标注 `upstream-ref`
+- ✅ **建模产物路径合法**：所有建模文件路径以 `<scenario>/<name>.md` 结尾（scenario ∈ 5 个固定值），被 `scripts/check-upstream-coverage.sh` 接受。内联模式（`## Inline Model` 文本块）**不可用于进入本 skill 下游流程**——所有下游产物的 `upstream-ref` 必须指向文件级建模
 
 如不清楚，AI 必须提出澄清问题。
 
 ### Definition of Done（任务完成检查清单）
 
 - ✅ Plan Review 已完成（Epic 时适用）
-- ✅ **Upstream Coverage Matrix 已产出且完整**：建模文件中**每条带锚点的条目**（实体/关系/不变量/派生关系/聚合/共享不变量——即六类锚点命名空间）在矩阵中都有对应的 Spec 场景 / Test / Impl，或显式标注 `NOT APPLICABLE + 理由`（详见 `guides/upstream-coverage.md`）
-- ✅ **所有产出条目 upstream-ref 合法**：Plan 的"持有聚合/模块依赖/产出契约"、Spec 的每条 Rule / State / State Transition、每个 Scenario、每个 Test、Impl 的 Coverage Matrix 条目，`upstream-ref` 都能在 `model.md` / `epic-model.md` 中找到对应锚点；不得存在虚假引用（由 `scripts/check-upstream-coverage.sh` 机械校验）
+- ✅ **Upstream Coverage Matrix 已产出且完整**：建模文件中**每条带锚点的条目**（按 scenario 划分的命名空间，详见 `guides/upstream-ref.md`）在矩阵中都有对应的 Spec 场景 / Test / Impl，或显式标注 `NOT APPLICABLE + 理由`（详见 `guides/upstream-coverage.md`）
+- ✅ **所有产出条目 upstream-ref 合法**：Plan 的"持有聚合/模块依赖/产出契约"、Spec 的每条 Rule / State / State Transition、每个 Scenario、每个 Test、Impl 的 Coverage Matrix 条目，`upstream-ref` 都能在对应建模文件中找到锚点；不得存在虚假引用（由 `scripts/check-upstream-coverage.sh` 机械校验）
 - ✅ Spec 存在或已更新
 - ✅ Spec 审查已完成（标准模式：人工审查；Auto 模式：跨 agent 审查）
 - ✅ 场景已生成并审查
@@ -354,7 +401,7 @@ updated: 2026-04-14T10:30
 |------|---------|
 | [workflows/standard.md](./workflows/standard.md) | 执行标准模式各步骤时 |
 | [workflows/auto.md](./workflows/auto.md) | 执行 Auto 模式时（裁决规则、Decision Log/Report 格式）|
-| [workflows/epic.md](./workflows/epic.md) | 处理 Epic 需求时（Plan 格式、Review 检查点）|
+| [workflows/epic.md](./workflows/epic.md) | 处理 Epic 需求时（Plan 格式、Review 检查点、迭代回流）|
 
 ### 任务指令（prompts/）
 
@@ -368,6 +415,7 @@ updated: 2026-04-14T10:30
 | [prompts/test-expansion.md](./prompts/test-expansion.md) | 需要补充测试场景时（备用）|
 | [prompts/feature-implementation.md](./prompts/feature-implementation.md) | 实现功能时 |
 | [prompts/upstream-review.md](./prompts/upstream-review.md) | 跨 agent 审查建模文件时 |
+| [prompts/exemption-review.md](./prompts/exemption-review.md) | 跨 agent 审查建模豁免理由时（步骤 0 豁免） |
 | [prompts/plan-review.md](./prompts/plan-review.md) | 跨 agent 审查 Plan 时 |
 
 ### 规则与指南（guides/）
@@ -386,6 +434,6 @@ updated: 2026-04-14T10:30
 
 | 文档 | 何时读取 |
 |------|---------|
-| [modeling-first/SKILL.md](../modeling-first/SKILL.md) | 执行步骤 0 建模时（全量或增量）|
+| [modeling-first/SKILL.md](../modeling-first/SKILL.md) | 执行步骤 0 建模时（全量或增量，v0.3+）|
 | [templates/spec.md](./templates/spec.md) | 生成 Spec 时（步骤 1，含 frontmatter 进度检查点）|
 | [templates/plan.md](./templates/plan.md) | 生成 Plan 时（Epic 模式，含 Progress 进度表）|

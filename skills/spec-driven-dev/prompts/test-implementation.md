@@ -27,7 +27,7 @@
 
 ```ts
 // @scenario S-3 [CRITICAL][INTEGRATION] 用户取消已发货订单 → 取消失败
-// @upstream model.md#Invariant.Order.5
+// @upstream domain/order.md#Invariant.Order.5
 it('rejects cancel when status is shipped', async () => {
   // ...
 });
@@ -36,7 +36,7 @@ it('rejects cancel when status is shipped', async () => {
 或使用测试名前缀：
 
 ```ts
-it('[S-3 / model.md#Invariant.Order.5] rejects cancel when status is shipped', async () => {
+it('[S-3 / domain/order.md#Invariant.Order.5] rejects cancel when status is shipped', async () => {
   // ...
 });
 ```

@@ -1,14 +1,15 @@
 # 提示模板 — 跨 agent 审查建模产物
 
-你是一个独立的建模审查员，需要审查刚由 `modeling-first` 产出的 Epic 建模（`epic-model.md`）或模块建模（`<module>/model.md`）。
+你是一个独立的建模审查员，需要审查刚由 `modeling-first`（v0.3+）产出的建模单元（`docs/models/<scenario>/<name>.md`）。
 
 **使用 agent 角色执行本任务**（不是 peer）——peer 角色用于对已有审查结论做第二视角挑战。
 
 ## 输入
 
-- 建模文件（`epic-model.md` / `model.md`）
+- 建模文件（`docs/models/<scenario>/<name>.md`）
 - 对应的需求原文（PRD / brainstorming 产出 / issue 链接）
-- 若审查模块建模，还需：`epic-model.md`（用于检查共享实体引用关系）
+- 若本单元声明了跨模块关系/不变量，还需：被引用方的建模文件（用于检查 `upstream-ref` 真实性）
+- 若本单元属于 Epic（多单元建模）：`modeling-first` 切分提议与其他相关单元的文件
 
 ## 输出
 
@@ -16,54 +17,71 @@
 
 逐条回答：
 
-1. **锚点完整性**：建模文件中的每个实体/关系/不变量/派生关系/聚合/共享不变量是否都带 `<!-- anchor: <Namespace>.<Name> -->` 标记？（六类命名空间见 `guides/upstream-ref.md`）
+1. **路径合规**：建模文件路径是否以 `<scenario>/<name>.md` 结尾？`<scenario>` 是否为 `domain` / `ui` / `components` / `process` / `state-machine` 之一？`<name>` 是否 kebab-case？
    - 是 → 通过
+   - 否 → 标注 `[Critical][路径不合规]`——机械校验会直接拒绝此文件
+2. **锚点完整性**：建模文件中的每个条目是否都带 `<!-- anchor: <Namespace>.<Name> -->` 标记？**按当前 scenario 可用的命名空间清单**（权威清单在 `guides/upstream-ref.md`——不要在本提示中复述清单，直接对照该文件验证）逐条检查：
    - 缺失 → 标注 `[Critical][锚点缺失]`，列出缺锚点的条目。机械校验会直接失败
-2. **锚点命名规范**：锚点是否符合 `guides/upstream-ref.md` 定义的命名空间和格式？
-   - 规范 → 通过
-   - 不规范 → 标注 `[Major][命名不规范]`
-3. **锚点唯一性**：同一文档内有无重复锚点？
+3. **锚点命名规范**：锚点是否符合 `guides/upstream-ref.md` 定义的形状（`[A-Z][A-Za-z0-9]*\.[A-Za-z0-9._-]+`）？命名空间是否适配当前 scenario（如 `Aggregate.*` 仅 `domain/` 允许）？具体 scenario × 命名空间矩阵见 `guides/upstream-ref.md`。
+   - 规范且适配 → 通过
+   - 不规范或越界 → 标注 `[Major][命名不规范]` / `[Major][命名空间越界]`
+4. **锚点唯一性**：同一文档内有无重复锚点？
    - 有 → 标注 `[Critical][锚点重复]`
+5. **Aggregates 前置章节**：`domain/` 单元是否声明了 Aggregates 章节（或 `Aggregate.none` + 理由）？其他 scenario 是否写 `Aggregate.none` + 理由？
+   - 否 → 标注 `[Major][Aggregates 声明缺失]`
 
 ### 1. 实体识别检查
 
 - 每个实体是否有需求依据（原文引用或用户动作）？
 - 是否遗漏明显的领域实体？
 - 是否引入了技术名词伪装成实体（接口、服务、控制器）？
+- **Source of Truth**：业务实体是否由 `domain/` 独占？`ui/` 是否正确引用（或改名为视图模型如 `OrderSummary`），未重定义同名实体？
+- 业务实体（含聚合内部实体）是否放在 `domain/` 而非 `process/` 或 `state-machine/`？
 
 ### 2. 关系建模检查
 
 - 每对相关实体是否明确了基数、所有权、聚合边界？
 - 聚合划分是否合理（删除语义是否正确）？
-- Epic 级：是否所有跨聚合关系都被列出（Plan 阶段会依赖这些关系定义契约）？
+- 跨模块关系是否以 `Rel.*` 锚点声明（持有方在前），且含契约线索（`event: ... / ref: ... / cmd: ... / snapshot: ...`）？
+- 跨模块关系是否在引用方的 `Relationships` 章节声明（而不是在 Epic 级文件中——v0.3+ 已取消 `epic-model.md`）？
 
 ### 3. 派生关系检查（仅完整模式）
 
 - 所有数值/时间/状态字段是否都经过派生性审视？
 - 派生关系是否以**等式**形式呈现（不接受"与 X 有关"）？
 - 是否存在应派生却被当独立字段的情况？
+- 视觉领域派生（`ui/` / `components/`）是否也走派生等式（如 `badgeColor = f(status)`）？
 
 ### 4. 不变量检查
 
-- 每个实体是否至少一条不变量，或显式写明"无不变量 + 理由"？
+- 每个实体是否至少一条不变量，或显式写明 `Invariant.<Entity>.none` + 理由？
 - 不变量是否用可验证形式（谓词）写成？
 - 是否遗漏明显的状态机/合法性约束？
+- **跨模块不变量归属**：`Invariant.*.cross.*` 是否放在**执行者模块**（即能在该模块内完成校验的一方）？是否带 `[跨模块]` 标注 + `upstream-ref` 引用对方实体？
 
 ### 5. Reuse Check（仅完整模式）
 
 - 每条"已有代码"断言是否带**具体文件路径和符号名**？
 - 是否存在"项目里可能有"这类未验证的模糊陈述？
+- 增量建模时，是否检查过其他建模单元（跨 scenario）是否已定义所需实体/组件？
 
-### 6. 模块级特有：与 epic-model 的对齐
+### 6. 跨单元对齐（多单元建模时适用）
 
-- 共享实体是否**引用** `epic-model.md`（`upstream-ref: epic-model.md#Entity.X`）而非重定义？
-- 模块的聚合是否与 `epic-model.md` 声明的一致？
-- 发现 `epic-model.md` 错误的 → 标注 `[Major][触发 Epic 回修]`，按 `workflows/epic.md` 的迭代回流规则处理
+- 本单元通过 `upstream-ref` 引用的其他单元锚点是否真实存在？
+- 共享的业务实体是否被正确引用（而非重定义）？
+- 共享的业务组件是否放在 `components/business-shared.md` 或对应 `components/<family>.md` 中？
+- 发现被引用单元的错误 → 标注 `[Major][触发上游回修]`，按 `workflows/epic.md` 的迭代回流规则处理
+
+### 7. 漂移对齐（增量建模时适用）
+
+- 是否已对照当前代码确认建模反映真实状态？
+- 若存在漂移，是否先修 md 再追加增量？
+- 已有锚点是否被保留（未被删除/重命名，除非下游同步更新）？
 
 ## 严重度标注
 
-- `[Critical]`：锚点缺失/重复（机械校验会失败）、虚构实体、违反聚合边界
-- `[Major]`：不变量遗漏、派生未识别、Reuse Check 不合格、与 `epic-model.md` 冲突
+- `[Critical]`：路径不合规 / 锚点缺失/重复（机械校验会失败）/ 虚构实体 / 违反聚合边界 / Source of Truth 冲突
+- `[Major]`：不变量遗漏、派生未识别、Reuse Check 不合格、命名空间越界、跨单元引用错误
 - `[Minor]`：命名风格、可读性、轻微遗漏
 - `[Info]`：观察或建议
 

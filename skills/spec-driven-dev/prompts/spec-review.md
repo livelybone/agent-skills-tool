@@ -1,17 +1,38 @@
 # 提示模板 — 跨 agent 审查 Spec（跨 agent）
 
+**使用 agent 角色执行本任务**（不是 peer）——peer 角色用于对已有审查结论做第二视角挑战。
+
 你是一个独立的 Spec 审查员，需要审查业务规范。
 
 ## 输入
 
 - Spec（业务规范）
-- **建模文件**（`model.md` / `epic-model.md`，由 `modeling-first` 产出）—— 必须提供，否则审查无法进行
+- **建模文件**（本模块涉及的全部 `docs/models/<scenario>/<name>.md`，由 `modeling-first` v0.3+ 产出）—— 若本次走建模豁免路径则不提供建模文件，但 Spec frontmatter 必须包含 `modeling_exemption` 结构化字段
 
 ## 输出
 
 审查报告，包含：
 
-### 0. 上游对齐检查（硬性检查，优先做）
+### 0a. 建模豁免质疑（若 Spec 走豁免路径则必做；否则跳过）
+
+若 Spec frontmatter 存在 `modeling_exemption` 字段，必须质疑其成立性：
+
+1. **`clause` 是否真的在 `modeling-first/SKILL.md`（v0.3+）的"跳过（直接进入实现）"清单内**？
+   - `clause_source` 行号与引用类别是否一一对应 → 否 → 标注 `[Critical][豁免引用错误]`
+2. **变更是否触及建模条目**？逐条自问（任一为"是"即豁免不成立；按 scenario 划分的命名空间见 `guides/upstream-ref.md`）：
+   - 新增/修改 Entity（domain 业务实体或 ui 视图模型）？
+   - 新增/修改 Rel / Aggregate？
+   - 新增/修改 Invariant（含跨模块 `Invariant.*.cross.*`）？
+   - 新增/修改 Derivation（业务或视觉派生）？
+   - 新增/修改 StateMachine / Process？
+   - 新增/修改 Component（UI 组件，含通用或业务共用）？
+   - 任一命中 → 标注 `[Critical][豁免不成立]`，要求回退到全量或增量建模
+3. **`rationale` / `evidence` 是否具体可验证**？（拒绝"改动小/简单/显然/常规重构"这类模糊措辞）
+   - 不充分 → 标注 `[Major][豁免理由不充分]`
+
+**本节存在任何 Critical 即阻断 Spec 进入 Scenario 阶段**。
+
+### 0b. 上游对齐检查（硬性检查，优先做；走豁免路径则跳过）
 
 逐条回答：
 

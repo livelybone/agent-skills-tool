@@ -6,10 +6,11 @@
 
 - Spec（业务规范）
 - 批准的测试用例（含 `@scenario` / `@upstream` 追溯字段）
-- **建模文件**（`model.md` / `epic-model.md`，由 `modeling-first` 产出）——必须提供
+- **建模文件**（`docs/models/<scenario>/<name>.md`，由 `modeling-first` v0.3+ 产出）——必须提供本模块涉及的全部建模单元
+  - **豁免分支**：若 Spec frontmatter 含已通过独立审查的 `modeling_exemption` 字段，允许无建模文件；此时下方"矩阵 2：Upstream Coverage Matrix"整表标 `⚠️ N/A + 见 frontmatter.modeling_exemption`，跳过逐条覆盖
 - Scenario 列表（含 `upstream-ref`）
 
-若缺任一，停止实现，向人工报告。
+若缺任一（豁免分支例外），停止实现，向人工报告。
 
 ## 前置步骤：Baseline Test Run
 
@@ -67,19 +68,20 @@
 ```
 | upstream 条目 | Spec 场景 | Test 位置 | Impl 位置 | 状态 |
 |--------------|----------|----------|----------|------|
-| model.md#Invariant.Order.1 | S-1 [PROPERTY] | tests/order.prop.test.ts:42 | src/order.ts:validate | ✅ |
-| model.md#Derivation.Order.total | S-5 [UNIT] | tests/order.unit.test.ts:60 | src/order.ts:38 | ✅ |
-| model.md#Invariant.Order.5 | S-3 [CRITICAL][INTEGRATION] | tests/order.int.test.ts:80 | src/order.ts:cancel | ✅ |
-| model.md#Rel.Order-OrderItem | — | — | — | ⚠️ NOT APPLICABLE + 理由 |
+| domain/order.md#Invariant.Order.1 | S-1 [PROPERTY] | tests/order.prop.test.ts:42 | src/order.ts:validate | ✅ |
+| domain/order.md#Derivation.Order.total | S-5 [UNIT] | tests/order.unit.test.ts:60 | src/order.ts:38 | ✅ |
+| domain/order.md#Invariant.Order.cross.1 | S-3 [CRITICAL][INTEGRATION] | tests/order.int.test.ts:80 | src/order.ts:cancel | ✅ |
+| domain/order.md#Rel.Order-OrderItem | — | — | — | ⚠️ NOT APPLICABLE + 理由 |
 ```
 
 **矩阵规则**：
 
-- 建模文件**每一条带锚点的条目**必须在矩阵中出现（实体、关系、不变量、派生关系、聚合、共享不变量——即六类锚点命名空间覆盖的条目）
+- 建模文件**每一条带锚点的条目**必须在矩阵中出现（按 scenario 划分的完整命名空间清单见 `guides/upstream-ref.md`——domain/ui/components/process/state-machine 各自可用的命名空间，含跨模块不变量 `Invariant.*.cross.*`）
 - 每条的状态必须是 `✅`（完整覆盖）或 `⚠️ NOT APPLICABLE + <具体理由>`
 - 不接受 `❌` 或遗漏——出现即 DoD 不通过
 - 每条的 Spec/Test/Impl 位置必须是真实存在的引用；虚假引用直接 DoD 失败
 - Spec/Test/Impl 位置格式和校验规则见 `guides/upstream-coverage.md` > 校验 3
+- 多单元场景（一个模块涉及多个 `<scenario>/<name>.md`）必须为每个单元分别产出矩阵（或在同一矩阵中按单元分段），因为 `check-upstream-coverage.sh` 按单元身份分别运行
 
 ### 校验流程
 

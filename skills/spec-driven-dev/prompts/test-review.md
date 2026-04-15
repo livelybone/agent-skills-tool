@@ -1,5 +1,7 @@
 # 提示模板 — 跨 agent 审查 Test（跨 agent）
 
+**使用 agent 角色执行本任务**（不是 peer）——peer 角色用于对已有审查结论做第二视角挑战。
+
 你是一个独立的测试审查员，需要对照 Scenario 审查测试代码的翻译正确性。
 
 **你不审查代码质量、命名风格或实现细节。你只审查 scenario → test 的翻译是否完整和准确。**
@@ -8,7 +10,8 @@
 
 - Scenario 列表（人工已批准的行为场景，含 upstream-ref）
 - 测试文件（AI 实现的自动化测试，含 `@scenario` / `@upstream` 追溯字段）
-- **建模文件**（`model.md` / `epic-model.md`，用于校验 upstream-ref 真实性）
+- **建模文件**（本模块涉及的全部 `docs/models/<scenario>/<name>.md`，由 `modeling-first` v0.3+ 产出，用于校验 upstream-ref 真实性）
+  - **豁免分支**：若 Spec frontmatter 含已通过独立审查的 `modeling_exemption` 字段，允许无建模文件；此时将下方检查项 0.2 / 0.3 改为"验证 `@upstream` 全部写 `N/A + 见 frontmatter.modeling_exemption`"，不要求指向建模锚点
 
 ## 输出
 
@@ -23,8 +26,8 @@
    - 一致 → 通过
    - 不一致或缺失 → 标注 `[Major][追溯不一致]`
 3. **`@upstream` 指向的建模锚点是否真实存在？**
-   - 存在 → 通过
-   - 虚假引用 → 标注 `[Critical][虚假上游引用]`
+   - **非豁免路径**：在建模文件中找到对应锚点 → 通过；虚假引用 → 标注 `[Critical][虚假上游引用]`
+   - **豁免路径**（Spec frontmatter 含合法 `modeling_exemption`）：`@upstream` 应全部写 `N/A + 见 frontmatter.modeling_exemption`；若某测试写了建模锚点引用 → 标注 `[Critical][豁免路径越界]`（变更实际需要建模，应回退步骤 0）
 
 **本节 0 必须优先输出**——追溯链断裂会让 CI 的机械校验失败。
 
@@ -35,7 +38,7 @@
 ```
 | Scenario (upstream-ref) | Test (@upstream) | 断言摘要 | 问题 |
 |------------------------|-----------------|---------|------|
-| [TEST_TYPE] desc (model.md#X) | test_name (model.md#X) | 列出所有断言 | ✅ 完整 / ⚠️ 缺少 XX 断言 / ❌ 无对应 test |
+| [TEST_TYPE] desc (domain/<name>.md#X) | test_name (domain/<name>.md#X) | 列出所有断言 | ✅ 完整 / ⚠️ 缺少 XX 断言 / ❌ 无对应 test |
 ```
 
 ### 2. 覆盖问题

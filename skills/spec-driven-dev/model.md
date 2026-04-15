@@ -1,4 +1,6 @@
-# Domain Model — spec-driven-dev Skill 内容结构
+# Domain Model — spec-driven-dev Skill 内容结构（**历史设计文档**）
+
+> ⚠️ **注意**：本文件是 v2→v3 过渡期的 skill 自我结构设计产物，**不是**本 skill 运行时的权威契约，也**不**被任何下游流程消费。真正的建模契约归属于 `modeling-first` v0.3+ 的 `docs/models/<scenario>/<name>.md`。本文件保留是为了追溯设计决策；内部自引用"model.md"指的是本文件自身，与下游引用的 `<scenario>/<name>.md` 无关。
 
 **Context**: 重构 spec-driven-dev skill 的文件组织与内容，消除跨文件重复、修正内容错放、补齐缺失
 **Source**: 用户要求 + 内容全量分析

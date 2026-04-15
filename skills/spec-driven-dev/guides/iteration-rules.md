@@ -48,9 +48,9 @@
 
 → 停止实现 → 确认根因是 Plan 的契约定义有歧义（而非单模块 Spec 问题）→ 人修订 Plan 中相关模块的"产出契约"→ 受影响模块重新走 Model（增量更新）→ Spec → Scenario → Test → Feature
 
-## 建模（model.md / epic-model.md）回修后的追溯产物失效
+## 建模（`docs/models/<scenario>/<name>.md`）回修后的追溯产物失效
 
-**任何**阶段发现建模文件需要回修（模块级 `model.md`、Epic 级 `epic-model.md`），必须同步失效并重建下游**所有**带 `upstream-ref` 的追溯产物。
+**任何**阶段发现建模文件需要回修（任一 `docs/models/<scenario>/<name>.md` 单元），必须同步失效并重建下游**所有**带 `upstream-ref` 的追溯产物。
 
 | 失效对象 | 处理 |
 |---------|------|
@@ -62,7 +62,7 @@
 
 **硬约束**：上游回修后，`scripts/check-upstream-coverage.sh` 必须重新通过才能进入 CI。若 Matrix 中残留对已删除锚点的引用，校验会直接失败。
 
-仅 Epic 级 `epic-model.md` 的回修有额外规则（涉及 Plan、多模块失效）——见 `workflows/epic.md` 的"迭代回流规则"。
+Epic 场景下（多个建模单元协同）若回修影响**聚合边界**或**跨模块契约**（`Aggregate.*` / `Rel.*` 锚点变化），有额外规则涉及 Plan 回流和多模块失效——见 `workflows/epic.md` 的"迭代回流规则"。
 
 ## Plan 回退限制
 

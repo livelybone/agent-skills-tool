@@ -6,25 +6,34 @@
 
 ## 步骤 0 — 建模（始终执行，豁免需记录理由）
 
-调用 `modeling-first` skill 产出或增量更新建模文件。此步骤是流程内硬步骤，不可跳过（除非符合豁免条件）。
+调用 `modeling-first`（v0.3+）skill 产出或增量更新建模文件。此步骤是流程内硬步骤，不可跳过（除非符合豁免条件）。
+
+**建模产物路径**：`docs/models/<scenario>/<name>.md`，scenario ∈ `{domain, ui, components, process, state-machine}`（5 个固定 scenario）。
 
 ### 全量建模
 
-目标模块尚无 `model.md` → 调用 `modeling-first` 完整模式，从零产出 `<module>/model.md`。
+本模块涉及的建模单元文件不存在 → 调用 `modeling-first` 完整模式，从零产出 `docs/models/<scenario>/<name>.md`（可能一次调用产出多个 scenario 的单元）。
 
 ### 增量建模
 
-目标模块已有 `model.md` 且本次变更引入新的领域信息（新实体/关系/不变量/派生关系/状态变化逻辑）→ 调用 `modeling-first`，在现有 `model.md` 上增量更新。
+本模块涉及的建模单元文件已存在且本次变更引入新的领域信息（新实体/关系/不变量/派生关系/状态变化逻辑）→ 调用 `modeling-first`，在对应文件上增量更新。
 
 增量建模约束：
-- **必须通过 `modeling-first` 执行**，不得绕过 skill 直接手编 `model.md`
-- 更新后 `model.md` 必须整体满足 `modeling-first` 质量门槛
-- 已有锚点不得删除或重命名（除非下游 `upstream-ref` 同步更新）
-- 更新后重新验证（反向、派生、复用、最小性、可引用）
+- **必须通过 `modeling-first` 执行**，不得绕过 skill 直接手编建模文件
+- 先做漂移对齐（对照当前代码确认 md 反映真实状态；有漂移先修 md）
+- 更新后整个文件必须满足 `modeling-first` 质量门槛（不只是新增部分）
+- 已有锚点不得删除或重命名（除非下游 `upstream-ref` 同步更新——这需升级用户）
+- 更新后重新验证（反向、派生、复用、跨模块、最小性、可引用）
 
-### 豁免
+### 豁免（反 rationalization 硬程序）
 
-本次变更符合 `modeling-first` SKILL.md Step 1 "不需要建模"清单 → 在 DoR 中记录豁免理由，跳过此步骤。
+本次变更若符合 `modeling-first/SKILL.md` 的"跳过（直接进入实现）"清单（纯样式/bug fix/机械字段增删/文案/国际化/纯技术重构/升级依赖），方可豁免建模。**豁免不是"agent 自判即可跳过"——必须经独立审查确认。完整程序见 `SKILL.md` > 步骤 0 > "建模豁免（反 rationalization 硬程序）"节**，此处仅复述关键门禁：
+
+1. **结构化记录**：豁免必须在 Spec frontmatter 以 `modeling_exemption` 字段结构化记录（字段骨架见 `templates/spec.md`，含 `clause / clause_source / rationale / evidence`）——禁止散文式理由。
+2. **独立审查**（标准模式版）：人工 Spec 审查时必须显式确认豁免成立性（审查清单见 `prompts/spec-review.md` 的 0a 节"建模豁免质疑"）；人不通过则卡在 DoR，不得进入 Spec 层。
+3. **升级边界**：若审查发现变更实际触及任一类建模条目（新增/修改 Entity / Rel / Invariant / Derivation / Aggregate / StateMachine / Process / Component 中任一，或跨模块不变量 `Invariant.*.cross.*`——按 scenario 划分的完整清单见 `guides/upstream-ref.md`），必须回退到全量或增量建模，不得继续以豁免路径推进。
+
+> Auto 模式下豁免走独立跨 agent 审查（`prompts/exemption-review.md`）——详见 `workflows/auto.md` 与 `SKILL.md` 步骤 0。
 
 ### 审查
 
@@ -62,7 +71,6 @@ status: in_progress
 last_completed_step: 0
 last_completed_step_name: 建模
 context_summary: ""
-decision_log_ref: ""
 updated: 2026-04-14T08:00
 ---
 
@@ -74,12 +82,12 @@ updated: 2026-04-14T08:00
 
 ## Rules
 
-- discount_code 是可选的（upstream-ref: model.md#Entity.Order）
-- 无效代码返回 INVALID_CODE（upstream-ref: model.md#Invariant.Discount.1）
-- 过期代码返回 EXPIRED_CODE（upstream-ref: model.md#Invariant.Discount.2）
-- 最大折扣为 50%（upstream-ref: model.md#Invariant.Discount.3）
-- 折扣不能超过订单总额（upstream-ref: model.md#Derivation.Order.discountedTotal）
-- 折扣不能为负数（upstream-ref: model.md#Invariant.Discount.4）
+- discount_code 是可选的（upstream-ref: domain/order-discount.md#Entity.Order）
+- 无效代码返回 INVALID_CODE（upstream-ref: domain/order-discount.md#Invariant.Discount.1）
+- 过期代码返回 EXPIRED_CODE（upstream-ref: domain/order-discount.md#Invariant.Discount.2）
+- 最大折扣为 50%（upstream-ref: domain/order-discount.md#Invariant.Discount.3）
+- 折扣不能超过订单总额（upstream-ref: domain/order-discount.md#Derivation.Order.discountedTotal）
+- 折扣不能为负数（upstream-ref: domain/order-discount.md#Invariant.Discount.4）
 ```
 
 每个步骤完成后更新 frontmatter 的 `current_step`、`status`、`context_summary` 等字段。
@@ -231,7 +239,7 @@ AI 在以下约束下实现功能：
 - tests（含 baseline 对比）
 - **coverage gate**（覆盖率阈值检查，见 `test-quality-gate` skill）
 - **mutation score gate**（变异测试阈值检查，见 `test-quality-gate` skill）
-- **upstream coverage gate**（建模追溯机械校验）：执行 `skills/spec-driven-dev/scripts/check-upstream-coverage.sh`，传入 `--upstream <model.md|epic-model.md>`（basename 必须是这两个之一，与 `modeling-first` 硬耦合）、`--matrix <Upstream Coverage Matrix>`、`--refs-glob <测试/场景/Spec 文件 glob>`。脚本失败即 CI 失败。若本阶段明确"无需建模"（记录在 DoR 的理由中），跳过本项并在 CI 日志中显式注明
+- **upstream coverage gate**（建模追溯机械校验）：执行 `skills/spec-driven-dev/scripts/check-upstream-coverage.sh`，传入 `--upstream <path/to/docs/models/<scenario>/<name>.md>`（路径必须以 `<scenario>/<name>.md` 结尾，scenario ∈ 5 个固定 scenario，与 `modeling-first` v0.3+ 硬耦合）、`--matrix <Upstream Coverage Matrix>`、`--refs-glob <测试/场景/Spec 文件 glob>`。多单元场景按身份分别运行（见 `guides/upstream-coverage.md` 的"Epic 多模块场景的调用方式"）。脚本失败即 CI 失败。若本阶段明确"无需建模"（记录在 DoR 的理由中），跳过本项并在 CI 日志中显式注明
 - CI pipeline
 
 > coverage gate 和 mutation score gate 的具体配置、阈值策略、打回修复流程由 `test-quality-gate` skill 提供。若项目尚未配置这两项 CI，在 CI Verification 步骤触发 `test-quality-gate` 的配置补全流程。
@@ -242,7 +250,7 @@ AI 在以下约束下实现功能：
 
 调用 `code-review` skill，`--scope=diff`，检测实现引入的克隆、意图级重复、设计质量问题。
 
-**与 upstream coverage gate 的分工**：`code-review` 的"建模对齐检查"中，ref 存在性验证（`upstream-ref` 指向的文件/行号是否真实存在）由 upstream coverage gate（11.2）覆盖，在本流程中跳过；语义对齐验证（实现是否偏离 `model.md` 声明的实体/关系/不变量语义）仍由 `code-review` 执行。
+**与 upstream coverage gate 的分工**：`code-review` 的"建模对齐检查"中，ref 存在性验证（`upstream-ref` 指向的文件/行号是否真实存在）由 upstream coverage gate（11.2）覆盖，在本流程中跳过；语义对齐验证（实现是否偏离建模单元 `docs/models/<scenario>/<name>.md` 声明的实体/关系/不变量/派生语义）仍由 `code-review` 执行。
 
 **门槛与修复闭环**：
 
