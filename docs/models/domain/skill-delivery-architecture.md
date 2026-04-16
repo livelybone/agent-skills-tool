@@ -130,7 +130,7 @@
 |-----------|--------------------------|------|------|
 | 建模与 plan 顶级能力 | `skills/spec-driven-dev/SKILL.md` | 收缩复用 | 保留为前置编排器 |
 | 需求澄清顶级 skill | 无（已搜索 `skills/*/SKILL.md`） | 新建 | 当前仓库缺失 |
-| 技术文档顶级 skill | 无（已搜索 `skills/*/SKILL.md`） | 新建 | 当前仓库缺失 |
+| 技术文档顶级 skill | `skills/tech-spec-writing/SKILL.md` | 复用 | 当前仓库已实现 |
 | 测试设计与实现顶级 skill | 无（已搜索 `skills/*/SKILL.md`） | 新建 | 当前仓库缺失 |
 | 按 spec 实现顶级 skill | 无（已搜索 `skills/*/SKILL.md`） | 新建 | 当前仓库缺失 |
 
