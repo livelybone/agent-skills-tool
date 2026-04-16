@@ -45,10 +45,10 @@
 - **ClarifiedRequirement** — 需求澄清阶段的正式交付物
 
 <!-- anchor: Entity.TechnicalSpec -->
-- **TechnicalSpec** — 技术文档阶段的正式交付物
+- **TechnicalSpec** — 技术文档阶段的正式交付物；使用稳定章节名组织内容，供下游通过 `spec-ref` 做最小追溯
 
 <!-- anchor: Entity.ExecutableTestSuite -->
-- **ExecutableTestSuite** — 测试设计与实现阶段的正式交付物
+- **ExecutableTestSuite** — 测试设计与实现阶段的正式交付物；`Ready for implementation` 分支中的测试必须带 `Scenario ID` 与 `@scenario` / `@spec-ref` 最小追溯
 
 <!-- anchor: Entity.HandoffPacket -->
 - **HandoffPacket** — `spec-driven-dev` 向 `tech-spec-writing` 交付的 requirement baseline + models + optional plan + optional review notes 包
@@ -57,7 +57,7 @@
 - **ReviewRound** — 独立审查轮次；在架构层代表 `spec-driven-dev` 对 `multi-agent-loop` 的可选调用
 
 <!-- anchor: Entity.DeliveredChange -->
-- **DeliveredChange** — 功能实现阶段的正式交付物
+- **DeliveredChange** — 功能实现阶段的正式交付物；至少包含 `Spec Completeness Matrix`、`Upstream Coverage Matrix`、`Validation`、`Blockers`、`Unfinished Items`、`Residual Risks` 和 `Status`
 
 ---
 
@@ -79,7 +79,7 @@
 - **TestDesignAndImplementationSkill ↔ FeatureImplementationFromSpecSkill** — 1:1 — 功能实现必须消费已实现的 ExecutableTestSuite
 
 <!-- anchor: Rel.FeatureImplementation-DeliveredChange -->
-- **FeatureImplementationFromSpecSkill ↔ DeliveredChange** — 1:1 — 功能实现输出 DeliveredChange
+- **FeatureImplementationFromSpecSkill ↔ DeliveredChange** — 1:1 — 功能实现输出 traceable DeliveredChange
 
 ---
 
@@ -91,6 +91,9 @@
 - `scope`
 - `technicalSpecApproved`
 - `testSuiteReady`
+- `modelConstraintsReady`
+- `blockingQuestionsResolved`
+- `domainCoverageReady`
 
 ### 派生值（不作为独立输入）
 
@@ -101,7 +104,7 @@
 - `SkillFlow.needsPlan = (scope == 'epic')`
 
 <!-- anchor: Derivation.SkillFlow.implementationReady -->
-- `SkillFlow.implementationReady = technicalSpecApproved && testSuiteReady`
+- `SkillFlow.implementationReady = technicalSpecApproved && testSuiteReady && modelConstraintsReady && blockingQuestionsResolved && domainCoverageReady`
 
 ---
 
@@ -119,8 +122,20 @@
 <!-- anchor: Invariant.TestDesignAndImplementationSkill.1 -->
 - `TestDesignAndImplementationSkill 不重新定义需求或技术文档语义`
 
+<!-- anchor: Invariant.TestDesignAndImplementationSkill.2 -->
+- `TestDesignAndImplementationSkill 在 Ready for implementation 分支中产出的 ExecutableTestSuite 必须带 Scenario ID 与 @scenario / @spec-ref 最小追溯`
+
 <!-- anchor: Invariant.FeatureImplementationFromSpecSkill.1 -->
-- `FeatureImplementationFromSpecSkill 必须同时消费批准后的 TechnicalSpec 与 ExecutableTestSuite`
+- `FeatureImplementationFromSpecSkill 必须同时消费批准后的 TechnicalSpec 与 ExecutableTestSuite，并在存在上游建模约束时对相关 docs/models/<scenario>/<name>.md 进行实现追溯`
+
+<!-- anchor: Invariant.FeatureImplementationFromSpecSkill.2 -->
+- `FeatureImplementationFromSpecSkill 只有在 Blocking Questions 已清零、每个声明的 spec 功能域都有对应可执行测试时，才允许进入 Delivered 分支`
+
+<!-- anchor: Invariant.DeliveredChange.1 -->
+- `DeliveredChange 必须包含 Spec Completeness Matrix、Upstream Coverage Matrix、Validation、Blockers、Unfinished Items、Residual Risks 和 Status`
+
+<!-- anchor: Invariant.DeliveredChange.2 -->
+- `Status == Delivered 时，Spec Completeness Matrix 中每个功能域都必须有真实测试证据，Upstream Coverage Matrix 必须保留精确的 Scenario ID（或显式 N/A）与 spec-ref`
 
 ---
 
@@ -132,11 +147,11 @@
 | 需求澄清顶级 skill | 无（已搜索 `skills/*/SKILL.md`） | 新建 | 当前仓库缺失 |
 | 技术文档顶级 skill | `skills/tech-spec-writing/SKILL.md` | 复用 | 当前仓库已实现 |
 | 测试设计与实现顶级 skill | `skills/test-design-and-implementation/SKILL.md` | 复用 | 当前仓库已实现 |
-| 按 spec 实现顶级 skill | 无（已搜索 `skills/*/SKILL.md`） | 新建 | 当前仓库缺失 |
+| 按 spec 实现顶级 skill | `skills/feature-implementation-from-spec/SKILL.md` | 复用 | 当前仓库已实现 |
 
 ---
 
 ## 6. Open Questions
 
 - [ ] `upstream-contracts` 是否在这轮 Epic 中单独成 skill，还是先继续留在 `tech-spec-writing` / `test-design-and-implementation` 的共享协议里？
-- [ ] `requirements-clarification` 的输出是自由文档，还是也要有固定模板？
+- [ ] `DeliveredChange` 是否需要在未来固定落盘到某个标准路径（例如 `docs/deliveries/`），还是继续允许作为自由格式的交付报告存在？
