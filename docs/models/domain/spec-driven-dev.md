@@ -116,7 +116,7 @@
 | 前置编排入口 | `skills/spec-driven-dev/SKILL.md` | 复用 | 已有 mode / scope / plan 语义 |
 | 建模能力 | `skills/modeling-first/SKILL.md` | 复用 | 已是稳定上游依赖 |
 | 独立审查编排 | `skills/multi-agent-loop/SKILL.md` | 复用 | 已支持 codex 独立审查 |
-| 后续 spec/test/impl 顶级 skill | `skills/tech-spec-writing/SKILL.md` | 部分复用 | 技术文档顶级 skill 已实现，测试与实现 skill 仍待补齐 |
+| 后续 spec/test/impl 顶级 skill | `skills/tech-spec-writing/SKILL.md`, `skills/test-design-and-implementation/SKILL.md` | 部分复用 | 技术文档与测试顶级 skill 已实现，功能实现 skill 仍待补齐 |
 
 ---
 

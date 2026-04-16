@@ -95,7 +95,7 @@
 | 建模编排 | `skills/spec-driven-dev/SKILL.md`, `skills/spec-driven-dev/workflows/epic.md` | 复用 | 已有建模与 plan 主路径 |
 | 建模执行 | `skills/modeling-first/SKILL.md` | 复用 | 上游原子 skill |
 | 独立审查执行 | `skills/multi-agent-loop/SKILL.md` | 复用 | 支持 codex 审查 |
-| 下游 handoff 消费方 | `skills/tech-spec-writing/SKILL.md` | 部分复用 | `tech-spec-writing` 已实现；其他下游顶级 skill 仍待引入 |
+| 下游 handoff 消费方 | `skills/tech-spec-writing/SKILL.md`, `skills/test-design-and-implementation/SKILL.md` | 部分复用 | 技术文档与测试顶级 skill 已实现；功能实现 skill 仍待引入 |
 
 ---
 

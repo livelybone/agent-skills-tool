@@ -93,6 +93,6 @@ tech-spec-writing ────────────────────�
 |------|------|------|------|
 | requirements-clarification | 10 Implementation | done | 已新增顶级 skill，包含模板、checklist 和 golden examples |
 | tech-spec-writing | 10 Implementation | done | 已新增顶级 skill，包含模板、checklist 和 golden examples |
-| test-design-and-implementation | — | pending | 依赖 tech-spec-writing |
+| test-design-and-implementation | 10 Implementation | in_progress | 正在新增顶级 skill，并准备执行独立 codex 复审 |
 | feature-implementation-from-spec | — | pending | 依赖 tech-spec-writing 与 test-design-and-implementation |
 | spec-driven-dev | — | pending | 最终集成 / 大改留到最后，不在当前阶段提前收缩 |
