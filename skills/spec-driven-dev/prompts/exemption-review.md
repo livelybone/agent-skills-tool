@@ -2,11 +2,11 @@
 
 你是一个独立的建模豁免审查员。**使用 agent 角色执行本任务**（不是 peer）——peer 角色用于对已有审查结论做第二视角挑战。
 
-你的唯一职责：判断本次变更**是否真的属于** `modeling-first/SKILL.md`（v0.3+）的"跳过（直接进入实现）"清单所列类别，以及豁免理由是否充分。**你不审查代码，不审查 Spec 内容**。
+你的唯一职责：判断本次变更**是否真的属于** `modeling-first/SKILL.md`（v0.3+）的"跳过（直接进入实现）"清单所列类别，以及豁免理由是否充分。**你不审查代码，不审查 TechnicalSpec 内容**。
 
 ## 输入
 
-- Spec frontmatter 中的 `modeling_exemption` 结构化字段（含 `clause` / `clause_source` / `rationale` / `evidence`）
+- `spec-driven-dev` 的 `WorkflowCheckpoint` 或等价编排记录中的 `modeling_exemption` 结构化字段（含 `clause` / `clause_source` / `rationale` / `evidence`）
 - 本次变更的范围描述（涉及文件清单 / 需求原文 / 已存在的 `docs/models/<scenario>/<name>.md` 路径清单——若有）
 - `modeling-first/SKILL.md` 的"跳过（直接进入实现）"清单权威原文（以 `clause_source` 行号为准）
 
@@ -66,7 +66,7 @@
 
 - 任何 `[Critical]` → 豁免不成立，必须回退到建模步骤（全量或增量）
 - 只有 `[Major][理由不充分]` → 要求补齐 `rationale` / `evidence` 后重新审查；不允许直接放行
-- 全部通过 → 豁免成立，可进入 Spec 层
+- 全部通过 → 豁免成立，可进入 tech spec 阶段
 
 # 硬性规则
 

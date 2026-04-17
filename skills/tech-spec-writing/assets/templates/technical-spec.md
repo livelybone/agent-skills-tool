@@ -6,6 +6,10 @@
 ## Source Inputs
 - <requirement baseline / ClarifiedRequirement / model paths / optional plan>
 
+## Upstream Models
+- <有上游模型时填写：docs/models/<scenario>/<name>.md>
+- <若无上游建模产物，写 `N/A`>
+
 ## Scope
 - <本 spec 明确覆盖的内容>
 
@@ -16,16 +20,17 @@
 - <什么结果算该 spec 成立>
 
 ## Rules
-- <规则描述> [source: requirement | model | plan]
+- <规则描述>（upstream-ref: <scenario>/<name>.md#<Anchor>）
+- <规则描述> [source: requirement | plan]
 
 ## Interfaces
 - <输入 / 输出 / 外部契约 / 权限边界>
 
 ## States
-- <可选：涉及状态机时填写>
+- <状态描述>（upstream-ref: <scenario>/<name>.md#<Anchor>）
 
 ## State Transitions
-- <可选：涉及状态机时填写>
+- <转换描述>（upstream-ref: <scenario>/<name>.md#<Anchor>）
 
 ## Non-Functional Constraints
 - <可选：性能 / 安全 / 合规 / 兼容性>

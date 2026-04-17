@@ -130,8 +130,8 @@ upstream-ref: domain/order.md#Invariant.Order.3, domain/order.md#Derivation.Orde
 |------|-----------------|
 | Plan | `持有聚合` 指向 `domain/<name>.md#Aggregate.<Name>`；`模块依赖` / `产出契约` 指向**引用方单元**的 `Rel.<A>-<B>` 锚点（通常是 `domain/<name>.md`，也可以是 `process/<name>.md`——以 `modeling-first/references/cross-module.md` 权威规则为准） |
 | Spec | 每条 Rule / State / State Transition 末尾行内标注 `（upstream-ref: <doc>#<anchor>）` |
-| Scenario | 每个场景末尾 `↑ upstream-ref: ...`（格式见 `guides/scenario-format.md`）|
-| Test | 顶部注释 `@upstream ...` 或测试名前缀（格式见 `prompts/test-implementation.md`）|
+| Scenario | 每个场景末尾 `↑ upstream-ref: ...`；具体场景格式由测试阶段 worker 定义 |
+| Test | 顶部注释 `@upstream ...` 或测试名前缀；具体测试文件约定由测试阶段 worker 定义 |
 | Impl | 关键位置注释 `// covers <upstream-ref>`；详细追溯由 Upstream Coverage Matrix 承载 |
 | Coverage Matrix | 每条 upstream 条目占一行（格式见 `guides/upstream-coverage.md`）|
 

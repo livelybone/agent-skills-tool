@@ -57,11 +57,11 @@
 | <module-3> | — | pending | |
 
 > **更新规则**：每个模块的每个步骤完成后，立即更新对应行的"步骤"和"状态"列。
-> - **步骤**：当前步骤编号 + 名称（如 `7 Test Implementation`）
+> - **步骤**：当前 orchestration 阶段（如 `tech-spec`、`test-design-and-implementation`、`feature-implementation`）
 > - **状态**：`pending` / `in_progress` / `done` / `blocked:<原因>`
 > - **备注**：关键上下文（审查轮次、裁决数、阻塞原因等）
 >
-> 此表是新会话定位 Epic 宏观进度的入口。各模块的详细上下文（`context_summary`）在 `spec/<module>.md` frontmatter 中；Auto 模式的 Decision Log 在 `$TMPDIR/spec-driven-dev-*/` 下按约定位置搜索（不持久化到仓库）。续接协议见 SKILL.md。
+> 此表是新会话定位 Epic 宏观进度的入口。各模块的详细上下文由 orchestrator 的 `WorkflowCheckpoint` 维护；Auto 模式的编排级 `Decision Log` 在会话或临时目录中维护，不持久化到仓库。续接协议见 SKILL.md。
 
 ---
 

@@ -24,9 +24,9 @@ metadata:
 ## 必须材料
 
 - 以下任一输入形态：
-  - 完整需求 + 相关 `docs/models/<scenario>/<name>.md`
-  - `ClarifiedRequirement` + 相关 `docs/models/<scenario>/<name>.md`
-  - 来自未来 `spec-driven-dev` 的 handoff contract：`requirement baseline + models + optional plan + optional review notes`
+  - 完整需求 + 可选的相关 `docs/models/<scenario>/<name>.md`
+  - `ClarifiedRequirement` + 可选的相关 `docs/models/<scenario>/<name>.md`
+  - 来自 `spec-driven-dev` 的 handoff contract：`requirement baseline + optional models + optional plan + optional review notes`
 - 若需求属于 Epic 中的某个模块：该模块对应的边界描述或 `plan` 条目
 - 现有约束：接口边界、权限规则、性能/合规要求、兼容性要求（如有）
 
@@ -47,6 +47,7 @@ metadata:
    - 用模板 `assets/templates/technical-spec.md`
    - 只写下游执行所需的行为与契约，不写实现代码或测试细节
    - 若模块涉及状态机或流程，显式写 `States` / `State Transitions`
+   - 若提供了上游建模产物，就把其中的规则、状态和约束吸收到 `TechnicalSpec`；若没有，也可基于现有 requirement baseline / ClarifiedRequirement / plan 正常写 spec
 
 4. **处理缺口**
    - 能被更保守解释消化的歧义：在 `Assumptions` 中记录
@@ -58,8 +59,7 @@ metadata:
    - 若仍缺少会改变测试设计或实现边界的信息：标记 `Blocked`
 
 6. **交棒下游**
-   - 交给 `test-design-and-implementation`
-   - 或直接交给 `feature-implementation-from-spec`（当测试已存在时）
+   - 产出 `TechnicalSpec`，供下游阶段消费
 
 ## 产物与格式
 
@@ -75,6 +75,7 @@ metadata:
 
 - `Goal`
 - `Source Inputs`
+- `Upstream Models`（有模型时必填；没有模型时写 `N/A`）
 - `Scope`
 - `Non-Goals`
 - `Acceptance Signals`
@@ -95,6 +96,7 @@ Golden examples：见 `references/golden-examples.md`
 - 下游看到产物后，能直接开始设计测试场景
 - 下游看到产物后，能知道本模块明确不做什么
 - 下游看到产物后，能知道什么结果算该 spec 成立
+- 若上游提供了模型，下游看到产物后，能知道本 spec 依赖了哪些模型输入
 - 若涉及状态变化，状态与转换规则不靠猜测
 - `Blocked` 状态必须把真正阻塞测试/实现的问题写进 `Blocking Questions`
 
@@ -105,6 +107,7 @@ Golden examples：见 `references/golden-examples.md`
 ### 本 skill 特定检查
 
  - [ ] `Goal / Source Inputs / Scope / Non-Goals / Acceptance Signals / Rules / Interfaces` 七项齐全
+ - [ ] 有上游模型时，`Upstream Models` 已填写；没有模型时明确写 `N/A`
  - [ ] 所有业务规则都来自 requirement baseline、模型或 plan，而不是凭空补设，且在 spec 中可追溯
 - [ ] 若模型里存在不变量、派生关系或状态机，spec 中有对应落位
  - [ ] `Assumptions`、`Blocking Questions` 与非阻塞 `Open Questions` 明确区分

@@ -1,374 +1,91 @@
-# Auto 模式详细规则
+# Auto 模式工作流
 
-> **前置依赖**：Auto 模式保留标准模式的所有执行步骤（Stub、Red Run、Baseline、Spec 完整性校验、CI 最低检查等）。执行具体步骤时，**必须同时参考 `workflows/standard.md` 中对应步骤的细则**。本文件只补充 Auto 模式特有的裁决规则和报告格式。跨 agent 审查机制见 SKILL.md > 跨 Agent 审查原则。
+Auto 模式是 `spec-driven-dev` 的**自动编排模式**。
 
-## 概述
+它的含义是：由 orchestrator 自动调用各阶段 worker，并在普通 stage gate 之间自动推进；不是 orchestrator 自己替代 worker 生成阶段内容。
 
-Auto 模式是一种全自动执行模式，**不管需求复杂度**，强制流程全部自动化。AI 承担所有审查和裁决职责，人工不介入中间环节。流程结束后，输出完整的 **Decision Report**。
+## 核心语义
 
-**默认审查 agent**：Auto 模式的所有跨 agent 审查（建模审查 / Plan 审查 / Spec 审查 / Scenario 审查 / Test 审查 / 建模豁免审查）默认使用 **`opencode`**，通过 `multi-agent-loop` 的 `run_agent.sh --agent=opencode` 启动。若 opencode 出现客观技术故障（CLI 不可用、持续超时），按下文"客观技术故障的处理"流程处理，不得由 AI 自主降级为同进程审查。
+- `--auto` 仍表示自动推进模式
+- 各阶段正式产物仍由对应 worker skill 生成
+- orchestrator 负责自动路由、检查 gate、维护 Decision Log / workflow summary
+- 只有触发升级边界时才暂停给用户
 
-## 与标准模式的区别
+## Auto 模式阶段序列
 
-| 环节               | 标准模式                        | Auto 模式                               |
-| ------------------ | ------------------------------- | --------------------------------------- |
-| 建模（步骤 0）      | 人工审查建模产物                | **强制** AI 跨 agent 审查（默认 opencode）+ AI 自主裁决 |
-| Spec Review        | 按复杂度可选 AI 审查 + 人工审查 | **强制** AI 跨 agent 审查（默认 opencode）+ AI 自主裁决 |
-| Scenario Review    | 按复杂度可选 AI 审查 + 人工审查 | **强制** AI 跨 agent 审查（默认 opencode）+ AI 自主裁决 |
-| Test Review        | 按复杂度可选 AI 审查 + 人工审查 | **强制** AI 跨 agent 审查（默认 opencode）+ AI 自主裁决 |
-| code-review (11.3) | 按复杂度可选                    | **强制**执行（工具调用，非跨 agent 审查），HIGH 必须修复 |
-| Red Run            | 始终执行                        | 始终执行                                |
-| Plan Review (Epic) | 人工确认                        | AI 自主裁决                             |
-| 中间暂停点         | 每个 Human Review 步骤暂停      | **不暂停**，全程自动推进                |
-| Decision Log       | 无                              | **强制维护**                            |
-| 流程结束           | 无汇总                          | 输出完整 **Decision Report**            |
+1. intake and route
+2. clarify if needed
+3. modeling
+4. plan if epic
+5. tech spec
+6. test design and implementation
+7. feature implementation
+8. workflow verification and summary
 
-## 触发方式
+## Auto 模式下 orchestrator 的职责
 
-两种触发方式：
+### 1. 自动路由 worker
 
-**1. 从头启动**：在需求描述中指定 `--auto`
+- 需求不清晰时自动调用 `requirements-clarification`
+- 默认调用 `modeling-first`；仅在建模豁免成立且已记录到 `WorkflowCheckpoint` 时跳过
+- Epic 自动产出并校验 `plan`
+- 按顺序调用 `tech-spec-writing` → `test-design-and-implementation` → `feature-implementation-from-spec`
 
-```
-/spec 实现订单退款流程 --auto
-```
+### 2. 自动维护编排级记录
 
-**2. 中途切换**：标准模式执行中随时指定 `--auto`
+- `Decision Log`：记录 stage routing、关键裁决、回退原因、审查降级、blockers
+- `WorkflowCheckpoint`：记录当前阶段、上一步完成情况、context summary
+- `workflow summary`：流程结束时面向用户的汇总，不替代 worker 自己的正式交付物
 
-```
-Spec 我已经审查通过了，后面 --auto 帮我走完
-```
+### 3. 自动触发独立审查
 
-中途切换时：
+- plan review 是 Auto Epic 中最常见的独立审查点
+- modeling exemption 若被使用，必须通过 `prompts/exemption-review.md` 完成独立审查
+- 其他阶段是否需要独立第二视角，跟随 worker skill 自身规则或当前风险判断
+- 独立审查必须通过 `multi-agent-loop` 执行，默认优先使用 `opencode`
 
-- 已完成的人工步骤保留，不重新审查
-- 从下一个未完成步骤开始按 Auto 规则执行（包括禁止中断、禁止简化审查等全部约束）
-- **部分完成的步骤**：产物已生成但未审查 → 从该步骤的审查环节开始；步骤进行到一半 → 从该步骤的开头重新执行
-- Decision Log 从切换点开始记录
-- Decision Report 开头标注切换点和人工已完成的步骤清单
+## 禁止行为
 
----
+- 不得因为 `--auto` 就跳过 worker stage
+- 不得把 worker 模板直接复制回 orchestrator 中维护
+- 不得在未生成阶段正式产物时伪造“已完成”状态
+- 不得以“上下文太长”为由暂停普通流程；应先写 checkpoint 再继续
 
-## 禁止中断规则
+## 升级边界
 
-**Auto 模式下，除裁决升级条件（见下方）外，AI 不得以任何理由暂停流程等待用户确认。**
+以下情况必须停止自动推进并升级给用户：
 
-以下均**不是**合法的暂停理由：
+- 需求语义本身存在冲突
+- 建模或 plan 需要超出当前权限的边界调整
+- worker 返回的 blocker 会改变后续阶段的核心行为
+- 独立审查出现无法自主裁决的结论冲突
+- 关键 worker 或审查 runner 出现不可恢复的技术故障
 
-- "上下文变长了"（→ 应触发 context 压力处理：写检查点 → 压缩 → 继续，见 SKILL.md > Context 压力处理）
-- "先确认一下再继续"
-- "这一步比较复杂，暂停一下"
-- "阶段性汇报进度"
-- "修复完成，等待指示"
-- 任何形式的"要继续吗？"
+## 审查与降级
 
-遇到这些情况时，正确做法是**继续执行下一步**，将中间状态记录到 Decision Log。Context 接近上限时，正确做法是写检查点 → 压缩上下文 → 继续执行（不是暂停）。
+- 独立审查 runner 不可用时，先在同一 runner 上至少重试一次
+- 仍失败则升级给用户，不得私自改成同进程自审
+- 如用户授权切换 runner 或接受降级，记录到 `Decision Log`
 
-唯一允许中断的情况是触发了裁决升级条件（见下方"裁决升级"章节）。中断时必须明确说明触发了哪一条升级条件。
+## Auto 模式完成条件
 
-## 禁止简化审查规则
+Auto run 完成时，用户应能看到：
 
-**Auto 模式下，所有跨 agent 审查步骤均为强制执行，不得降级、简化或跳过。**
+- 本次 workflow 经过了哪些阶段
+- 哪些阶段成功完成、哪些阶段被阻塞
+- 当前最终交付物是什么（通常是 `DeliveredChange` 或显式 blocker）
+- 还剩哪些 residual risks / unfinished items
 
-以下均**不是**简化审查的合法理由：
-
-- "改动范围小 / 改动简单"
-- "上下文太长了"（→ 应触发 context 压力处理，不是简化审查的理由）
-- "与前一个模块类似"
-- "是增量补齐，不是新功能"
-- "subagent 已经完成了完整流程"（subagent 执行 ≠ 跨 agent 审查）
-- "已经经过 N 轮审查了"
-- **"无可用异构 agent"**（`multi-agent-loop` 支持用同一 agent 启动独立进程，见 SKILL.md > 跨 Agent 审查原则。这个理由永远不成立）
-
-**每个模块的每个审查步骤必须独立、完整地执行跨 agent 审查**——即使该模块看起来很简单、改动很小、或与其他模块高度相似。
-
-> **code-review (11.3) 不属于跨 agent 审查步骤**。`code-review` 是工具调用（jscpd 脚本 + LLM 精筛），由主 agent 直接执行，不需要通过 `multi-agent-loop` 启动独立 agent。Auto 模式下 code-review 强制执行，但不受上述"禁止简化审查"规则约束——是否阻塞流程推进由门槛规则（HIGH 必须修复）控制，不由跨 agent 审查机制控制。
-
-### 客观技术故障的处理（非降级豁免）
-
-上述"禁止简化"规则针对的是**主观判断导致的跳过或降级**。若因客观技术故障（agent CLI 崩溃、API 持续超时、网络不可达）导致跨 agent 审查**无法执行**，按以下流程处理：
-
-1. **必须先重试**：在**同一 agent**（opencode）上至少重试 1 次（适用于超时、网络抖动等临时故障），确认确实不可恢复。**不得**在重试阶段自主切换到其他 agent（如 codex/claude）——切换 agent 属于"降级"，必须先升级用户授权
-2. **升级给用户裁决**：报告故障原因（失败步骤 + 已重试次数 + 错误日志摘要），由用户决定：等待 opencode 恢复后继续 / 授权切换到后备 agent 继续 / 接受降级（同进程审查）继续
-3. **用户选择切换 agent 或降级时**：在 Decision Log 中记录为 `[审查降级-用户授权]`，注明故障原因、切换到的 agent（或降级为同进程）、用户授权时间；在 Decision Report 的"流程完整性"中标记为 ⚠️；在"建议用户复核的内容"中列出未审查的模块和步骤
-
-**关键区分**：AI 不得自主决定降级——"CLI 不可用"是升级条件，不是自主降级的理由。同 agent 重试是合法的故障恢复；**换 agent 或放弃 `multi-agent-loop` 走同进程审查**则属于降级，必须用户授权。
-
----
-
-## 禁止并行审查规则
-
-**单个模块内的流程步骤（0→1→…→13）必须严格顺序执行，不得并行。**
-
-原因：每个审查步骤可能触发迭代修正（见 `guides/iteration-rules.md`），后续步骤的输入依赖前置步骤的审查结果：
-
-- Spec 审查可能修改 Spec → Scenario 需要重新生成
-- Scenario 审查可能补充/修改 Scenario → Test 需要重新实现
-- Test 审查可能发现翻译偏差 → Test 需要修复后才能 Red Run
-
-并行审查等于假设"前面的审查不会发现任何问题"——这与审查的存在意义矛盾。
-
-**允许并行的唯一场景**：Epic 中**不同模块之间**可以并行（前提是模块间无依赖关系）。同一模块内的步骤永远串行。
-
----
-
-## Subagent 使用边界
-
-Subagent（如 `subagent-driven-development`）是执行工具，不是流程替代品。
-
-### Subagent 可以做的
-
-- 执行单个步骤的具体任务（如：根据已审查的 Scenario 编写测试代码、根据已审查的 Spec 实现功能）
-- 并行执行多个模块中**同一步骤**的实现工作
-
-### Subagent 不可以做的
-
-- **不得将多个流程步骤打包成一个 subagent 任务**（如"写 Spec + 生成 Scenario + 写测试 + 实现功能"）
-- **不得替代跨 agent 审查**——subagent 执行完成后，controller 仍必须启动跨 agent 审查
-- **不得跳过阶段性产物生成**——subagent 的输出必须是当前步骤的产物，不是最终代码
-
-### 违规模式识别
-
-以下用法等于绕过流程，必须避免：
-
-- 将"按照 spec-driven-dev 流程实现 XX 模块"作为 subagent 的 prompt → 这把整个流程塞进了一个黑盒
-- 对后续模块"参照 RT-1 的模式直接实现" → 每个模块必须独立走完流程
-- 用 subagent 输出直接替代 Scenario 文件 → Scenario 必须作为独立的 `.scenarios.md` 产物存在
-
----
-
-## 阶段性产物检查点
-
-Auto 模式下，每个模块在推进到下一步之前，**必须产出对应的阶段性产物**。Controller 在推进前检查产物是否存在。
-
-| 步骤                   | 必须产出                           | 产物位置           |
-| ---------------------- | ---------------------------------- | ------------------ |
-| 建模（步骤 0）          | `docs/models/<scenario>/<name>.md`（全量或增量更新）或豁免记录 | `docs/models/<scenario>/` 或 Spec frontmatter 的 `modeling_exemption` 字段 |
-| 跨 agent 审查建模       | Decision Log 条目                  | `$TMPDIR` 临时文件或当前会话 |
-| Spec 生成              | `<module>.md`                      | `spec/`            |
-| 跨 agent 审查 Spec     | Decision Log 条目                  | `$TMPDIR` 临时文件或当前会话（受下方"存放位置"条款约束）           |
-| Scenario 生成          | `<module>.scenarios.md`            | `spec/`            |
-| 跨 agent 审查 Scenario | Decision Log 条目                  | `$TMPDIR` 临时文件或当前会话（受下方"存放位置"条款约束）           |
-| Test Implementation    | 测试文件（按 `guides/repo-structure.md` 规则） | `src/` 或 `tests/` |
-| 跨 agent 审查 Test     | Decision Log 条目                  | `$TMPDIR` 临时文件或当前会话（受下方"存放位置"条款约束）           |
-| Red Run                | 运行结果记录（全部红色）           | 当前会话           |
-| Feature Implementation | 实现代码                           | `src/`             |
-| Spec 完整性校验        | 完整性矩阵                         | 当前会话           |
-| code-review (11.3)     | review report（HIGH 已清零）        | `.code-review/review-report.md` |
-| CI Verification        | CI 通过记录                        | 当前会话           |
-
-**缺少任何一项产物即视为该步骤未完成，禁止推进到下一步。**
-
-**进度检查点更新**：每个步骤完成后，**必须立即更新**对应文件的检查点（`spec/<module>.md` frontmatter 或 `plan.md` Progress 表）。这与产物产出同等重要——检查点是跨会话续接的唯一依据。详见 SKILL.md > 进度检查点。
-
-### Decision Log / Decision Report 的存放位置（硬性约束）
-
-**Decision Log 和 Decision Report 是会话产物，禁止落盘到仓库。**
-
-允许的存放方式（按优先级）：
-
-1. ✅ **`$TMPDIR` 临时文件**（推荐）：写入 `$TMPDIR/spec-driven-dev-<session-id>/decision-log.md`（会话结束或系统重启自动清理）。优势：不受 context 压缩影响，大型 Epic Auto 模式下不会丢失
-2. ✅ **会话上下文中维护**：对于短流程（单模块、低复杂度）可直接在会话中维护
-3. ✅ **两者并用**：在 `$TMPDIR` 维护完整版，同时在会话中维护摘要版
-
-- ❌ 禁止：写入仓库内任何路径，包括但不限于：
-  - `spec/<epic>.decision-log.md`
-  - `spec/<module>.decision-log.md`
-  - `spec/<epic>.decision-report.md`
-  - `docs/`、`memory/` 下的等价文件
-
-理由：
-
-1. Decision Log 是流程内部状态，不是交付物；Decision Report 的消费者是当前会话的用户，不是未来的读者
-2. 落盘到仓库会产生维护负担（PR review、版本化、清理）且与"会话产物"定位矛盾
-3. `$TMPDIR` 临时文件解决了 context 压缩导致 Decision Log 丢失的问题，同时避免了仓库污染
-4. 如需跨会话追溯，走 git log / PR 描述，不走 spec/ 目录
-
-**`$TMPDIR` 使用规范**：
-- 目录结构：`$TMPDIR/spec-driven-dev-<session-id>/`（session-id 可用时间戳或 PID）
-  - Decision Log：`decision-log.md`（流程中持续追加）
-  - Decision Report：`decision-report.md`（流程结束时生成）
-- 流程结束后将 `$TMPDIR` 中的 Decision Report 输出到会话给用户
-- 不主动清理——依赖 OS 的 `$TMPDIR` 自动清理机制
-- **禁止将 `$TMPDIR` 路径提交到 git 或写入任何持久化配置**
-
-**例外**：仅当仓库级 CLAUDE.md **同时满足以下全部条件**时，方可落盘到仓库：
-
-1. 在 CLAUDE.md 中**按名字显式点到** "Decision Log" 和/或 "Decision Report"（不接受"中间产物"、"过程记录"、"审查记录"等泛化表述的推定豁免）
-2. 明确指定落盘路径（如 `spec/<epic>.decision-log.md`）
-3. 明确说明保留策略（何时清理、是否纳入 PR review）
-
-skill 本身不产生仓库落盘行为。任何未同时满足上述三项的仓库级表述，一律按"禁止仓库落盘"处理。
-
-**豁免粒度**：豁免只对 CLAUDE.md 中**按名字被点到**的那一类产物生效——只点到 "Decision Log" 不意味着 "Decision Report" 也被豁免，反之亦然。
-
-### Epic 模块间一致性
-
-Epic 包含多个模块时，**后续模块必须与前置模块保持相同的流程严格度**。已知退化模式：
-
-- 前 1-2 个模块流程规范，后续模块逐步简化 → 禁止
-- 前置模块走完整审查，后续模块"参照前面的"跳过 → 禁止
-- 上下文变长后用 subagent 一把梭 → 禁止
-
-每个模块都是独立的 spec-driven-dev 流程实例，不继承前置模块的审查结论。
-同一模块的跨 agent 审查若进入下一轮，必须创建新的 `task-name` 和目录，例如 `spec-review-orders-r1` → `spec-review-orders-r2`；禁止复用同一目录覆盖前一轮产物。
-
----
-
-## AI 裁决规则
-
-### 裁决权限
-
-> **核心原则**："人定义行为；AI 执行"——这一原则在 Auto 模式下通过严格限制 AI 可自主裁决的范围来维持。**任何新增或修改业务语义的动作必须升级用户**，AI 自主裁决只限于不引入新语义的补全与修正。
-
-AI **可以自主裁决**的（严格受限于"不新增业务语义"）：
-
-- **Spec 措辞消歧**（同一语义的多种措辞 → 选其一并记录；**不得**借消歧之名补写新规则）
-- **Scenario 补充已声明行为的边界场景**（Spec/建模已声明某 Rule/State，AI 补齐该 Rule 的等价类/边界/异常分支；**不得**补出 Spec 未声明的新 Rule）
-- **Test 与 Scenario 的翻译偏差修复**（断言对齐、测试名对齐、`@upstream` 字段补齐；**不得**改写 Scenario 本身）
-- **机械格式修正**（缺失 `upstream-ref` 字段补齐到已存在的锚点、Coverage Matrix 行格式修正、锚点命名空间规范修正）
-
-### 裁决升级（Auto 模式的中断点）
-
-以下情况 AI **必须中断流程并报告用户**，不允许自主裁决：
-
-**业务语义层（硬红线，即使 AI 认为"显而易见"也必须升级）**：
-
-- **Spec 新增或修改 Rule / State / State Transition**（任何一条都属于定义行为，必须升级）
-- **Scenario 引入了 Spec 未声明的业务规则**（说明 Spec 有真实遗漏，必须先回修 Spec 再由用户审查）
-- **Plan 模块边界调整**（切分、合并、职责迁移均改变契约）
-- **Plan 依赖关系新增或删除**（影响跨模块契约）
-- **建模条目新增或修改**（实体/关系/不变量/派生关系/聚合/跨模块不变量 `Invariant.*.cross.*`/状态机/流程/组件——按 scenario 划分的完整清单见 `guides/upstream-ref.md`；任一类都属于定义领域，必须升级）
-- **建模豁免**（Step 0 跳过建模时，豁免理由必须经独立跨 agent 审查通过，不得由执行 agent 自裁；完整程序见 `SKILL.md` 的"步骤 0 — 建模"小节内"建模豁免（反 rationalization 硬程序）"节；审查 prompt 见 `prompts/exemption-review.md`）
-
-**原有升级条件（保留）**：
-
-- **需求本身存在根本性矛盾**（如两条规则互相冲突且无法通过优先级解决）
-- **安全风险**（如发现需求隐含的安全漏洞）
-- **超出 Spec 边界的架构决策**（如需要引入新的外部依赖或改变系统架构）
-- **需求信息不足**（DoR 校验不通过——功能目标不清晰、业务规则缺失、范围不明确、依赖未知）
-- **功能无法实现**（Spec 完整性校验发现某功能域因客观原因无法实现）
-- **CI 持续失败**（修复尝试超过 2 轮仍无法通过 CI）
-
-### 裁决原则
-
-1. **不定义行为**：AI 不得在 Auto 模式下新增或修改任何业务语义；有疑即升级
-2. **保守优先**：有歧义时选择更安全、更受限的解释（若两种解释都合理则升级）
-3. **完整性优先**：补齐边界场景时仅限于 Spec 已声明规则的边界展开，不引入新规则
-4. **一致性优先**：裁决必须与 Spec 已有规则一致，不得引入矛盾
-5. **可追溯**：每个裁决必须记录原因和替代方案
-
-### 自检判别（AI 在裁决前必须自问）
-
-在采取任何裁决动作前，AI 必须自问以下三问，**任一为"是"即升级用户**，不得自主裁决：
-
-1. 这次裁决是否会让 Spec 出现一条 Spec 原文未涵盖的 Rule / State / State Transition？
-2. 这次裁决是否会让 Scenario 检验一条 Spec 未声明的行为？
-3. 这次裁决是否会改变建模文件的条目或 Plan 的模块/依赖边界？
-
-> 三问均为"否"才属于"不定义行为"范畴，允许自主裁决并记入 Decision Log。
-
----
-
-## Decision Log 格式
-
-> ⚠️ **存放位置**：维护在 `$TMPDIR` 临时文件或当前会话中，禁止落盘到仓库。详见上文"Decision Log / Decision Report 的存放位置（硬性约束）"。
-
-Auto 模式全程维护一个结构化的 Decision Log，每条记录包含：
+## Decision Log 建议字段
 
 ```markdown
-### [阶段] 裁决 #N
+### [阶段] 决策 #N
 
-- **模块**：[模块名称，单模块任务写"—"]
-- **发现**：[描述发现的问题]
-- **受影响条目**：[具体的 Spec 规则 / Scenario 编号 / 测试文件:行号 / Plan 模块名]
-- **变更前**：[原文或原状态，简要引用]
-- **裁决（变更后）**：[采取的行动及变更后的内容]
-- **理由**：[为什么这样裁决]
-- **替代方案**：[考虑过但未采用的方案]
-- **风险等级**：Low / Medium / High
-- **影响范围**：[哪些后续步骤受影响]
+- 模式：auto
+- 当前阶段：<stage>
+- 调用 worker：<skill>
+- 输入摘要：<关键输入>
+- 结果：<完成 / 回退 / blocked>
+- 原因：<为什么>
+- 后续动作：<next stage or escalation>
 ```
-
-### 风险等级判定标准
-
-- **High**：改变了业务规则语义、影响多个下游步骤、或涉及金钱/权限/数据完整性
-- **Medium**：补充了遗漏的边界场景、调整了测试断言、或修正了 Spec 歧义
-- **Low**：格式/术语修正、覆盖度微调、无语义影响的补充
-
-### 阶段标签
-
-`[Modeling Review]`、`[Plan Review]`、`[Spec Review]`、`[Scenario Review]`、`[Test Review]`、`[Code Review]`、`[CI Verification]`
-
----
-
-## Decision Report 格式
-
-> ⚠️ **存放位置**：维护在 `$TMPDIR` 临时文件或当前会话中，流程结束后输出给用户。禁止落盘到仓库。详见上文"Decision Log / Decision Report 的存放位置（硬性约束）"。
-
-流程结束后，输出 Decision Report。**完整性语义**：Report 基于生成时可获取的状态判定——若 Decision Log 已被 OS 清理（`$TMPDIR` 重启后丢失），在 Report 中标注"Decision Log 不可用，以产物为准"，不阻塞 Report 生成也不视为错误。
-
-```markdown
-# Decision Report
-
-## 概览
-
-- **模式**：Auto
-- **需求**：[一句话描述]
-- **复杂度**：[评估的复杂度]
-- **总裁决数**：N
-- **按风险等级**：High: X / Medium: Y / Low: Z
-
-## 裁决摘要
-
-### High Risk 裁决（需要用户重点关注）
-
-[列出所有 High 风险的裁决，按阶段排列]
-
-### Medium Risk 裁决
-
-[列出所有 Medium 风险的裁决]
-
-### Low Risk 裁决
-
-[列出所有 Low 风险的裁决]
-
-## 流程完整性
-
-- 建模审查：✅ 通过 / ⚠️ 有裁决 / ⚠️ 审查降级-用户授权
-- Plan 审查（Epic 时）：✅ 通过 / ⚠️ 有裁决 / ⚠️ 审查降级-用户授权
-- Spec 审查：✅ 通过 / ⚠️ 有裁决 / ⚠️ 审查降级-用户授权
-- Scenario 审查：✅ 通过 / ⚠️ 有裁决 / ⚠️ 审查降级-用户授权
-- Test 审查：✅ 通过 / ⚠️ 有裁决 / ⚠️ 审查降级-用户授权
-- Red Run：✅ 全部红色 / ⚠️ 有异常
-- Baseline Test Run：✅ 已记录 / ⚠️ 有预存在失败
-- Spec 完整性校验：✅ 全部实现 / ⚠️ 有 ❌ 项（已升级用户）
-- code-review：✅ 无 HIGH / ⚠️ HIGH 已修复（N 轮）/ ❌ HIGH 未解决
-- CI 验证：✅ 通过 / ❌ 失败
-
-## 分模块裁决（Epic 时输出）
-
-### Module: [模块名称]
-
-- 裁决数：N（High: X / Medium: Y / Low: Z）
-- 关键裁决：[列出该模块的 High/Medium 裁决摘要]
-
-## Upstream Coverage（格式见 `guides/upstream-coverage.md`）
-
-- 最终的 Upstream Coverage Matrix
-- upstream 回修次数和每次的原因
-- NOT APPLICABLE 条目清单及理由
-
-## 建议用户复核的内容
-
-[基于 High / Medium 风险裁决，建议用户重点复核哪些 Spec 规则、Scenario 或实现]
-```
-
----
-
-## 与标准模式的共存
-
-- Auto 模式不改变标准模式的任何行为
-- 不指定 `--auto` 时，默认走标准模式
-- Auto 模式的所有审查步骤使用与标准模式相同的审查模板（`prompts/*.md`）
-- 迭代修正机制仍适用，只是由 AI 替代人工做最终决策
