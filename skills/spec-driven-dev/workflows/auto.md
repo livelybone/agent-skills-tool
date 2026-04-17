@@ -36,11 +36,13 @@ Auto 模式是 `spec-driven-dev` 的**自动编排模式**。
 - `Decision Log`：记录 stage routing、关键裁决、回退原因、审查降级、blockers
 - `WorkflowCheckpoint`：记录当前阶段、上一步完成情况、context summary
 - `workflow summary`：流程结束时面向用户的汇总，不替代 worker 自己的正式交付物
+- 最终 verification 阶段自动运行 `scripts/check-upstream-coverage.sh` 校验 Matrix；失败分流规则同 `workflows/standard.md` 步骤 7
 
 ### 3. 自动触发独立审查
 
-- plan review 是 Auto Epic 中最常见的独立审查点
-- modeling exemption 若被使用，必须通过 `prompts/exemption-review.md` 完成独立审查
+- **建模审查（强制）**：`modeling-first` 产出建模单元后，必须通过 `prompts/upstream-review.md` 做独立审查，承担命名空间合法性与领域对齐兜底（见 `guides/upstream-ref.md`）
+- **建模豁免审查（条件强制）**：若使用 modeling exemption，必须通过 `prompts/exemption-review.md` 完成独立审查
+- **Plan Review（Epic 强制）**：Epic 场景下的 plan review 必须通过 `prompts/plan-review.md` 做独立审查
 - 其他阶段是否需要独立第二视角，跟随 worker skill 自身规则或当前风险判断
 - 独立审查必须通过 `multi-agent-loop` 执行，默认优先使用 `opencode`
 
@@ -74,6 +76,7 @@ Auto run 完成时，用户应能看到：
 - 本次 workflow 经过了哪些阶段
 - 哪些阶段成功完成、哪些阶段被阻塞
 - 当前最终交付物是什么（通常是 `DeliveredChange` 或显式 blocker）
+- Upstream Coverage Matrix（已通过 `scripts/check-upstream-coverage.sh`）
 - 还剩哪些 residual risks / unfinished items
 
 ## Decision Log 建议字段

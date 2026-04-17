@@ -2,9 +2,9 @@
 
 **Run Mode**: `<standard | auto>`
 **Scope**: `<single-module | epic>`
-**Current Stage**: `<intake | clarification | modeling | planning | tech-spec | test | implementation | verification | done | blocked>`
+**Current Stage**: `<intake | clarification | modeling | planning | tech-spec | test-design-and-implementation | feature-implementation | verification>`
 **Last Completed Stage**: `<stage>`
-**Status**: `<pending | in_progress | done | blocked:<reason>>`
+**Status**: `<pending | in_progress | done | blocked:<reason> | partially-done>`
 **Modeling Status**: `<models-ready | exemption-approved | modeling-blocked>`
 **Modeling Exemption**:
 - `none`

@@ -115,7 +115,7 @@ Epic 的核心是：
 ### Gate 2: 进入 tech spec 前
 
 - `docs/models/<scenario>/<name>.md` 已就绪
-- Epic 场景的 `plan` 已通过结构校验
+- Epic 场景的 `plan` 已通过 `scripts/check-plan-structure.sh` + `scripts/check-upstream-coverage.sh` 两项机械校验
 
 ### Gate 3: 进入 test 阶段前
 
@@ -130,6 +130,7 @@ Epic 的核心是：
 ### Gate 5: workflow 完成前
 
 - `feature-implementation-from-spec` 已产出 `DeliveredChange`
+- Upstream Coverage Matrix 已产出并通过 `scripts/check-upstream-coverage.sh`（结构与必测条目见 `guides/upstream-coverage.md`）
 - 当前 run 的关键验证结果已汇总
 - `WorkflowCheckpoint` 已更新到最终状态
 
@@ -151,11 +152,17 @@ Epic 的核心是：
 - 作用：把上一阶段已确认的输入边界路由给下一 worker
 - 内容：当前阶段、来源产物、目标 worker、关键约束、blockers 摘要
 - 不复制 worker 自己的详细模板
+- **Producer**：orchestrator 在每个 stage 完成时产出（Epic 模块路由时按模块产出）
+- **Consumer**：下游 worker 的入口消费，作为 routing input 与输入边界依据
+- **持久化**：默认只作为 orchestrator 会话内的路由载体，不强制落盘；需要跨会话续接时以 `WorkflowCheckpoint` 的 Context Summary 承载关键字段
 
 ### WorkflowCheckpoint
 
 - 作用：断点续接、阶段 gate、`--auto` 恢复执行
 - 最少包含：当前阶段、上一步完成状态、context summary、已知 blockers
+- **Producer**：orchestrator 在每个 stage 完成后立即更新
+- **Consumer**：下一次会话启动时由 orchestrator 读取，定位续接点
+- **持久化**：Epic 场景落到 `plan.md` 的 Progress 表及相邻同目录位置；单模块场景允许仅在会话内维护，但用户明确要求续接时必须落盘
 
 ## Definition Of Done
 
@@ -167,6 +174,7 @@ Epic 的核心是：
 - `tech-spec-writing`、`test-design-and-implementation`、`feature-implementation-from-spec` 已按顺序被调用
 - 当前 run 的最终状态可由 `DeliveredChange` + workflow summary 清晰说明
 - `WorkflowCheckpoint` 已反映最终阶段与遗留风险
+- Upstream Coverage Matrix 已产出并通过机械校验，workflow summary 包含最终 Matrix
 
 ## 不覆盖范围
 

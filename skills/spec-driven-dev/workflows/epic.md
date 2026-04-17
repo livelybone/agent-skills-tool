@@ -38,10 +38,10 @@ Plan 生成后必须通过：
 
 ## 步骤 4 — Plan Review
 
-Epic 中的 plan review 是最值得做独立第二视角的审查点。
+Epic 中的 plan review 是最值得做独立第二视角的审查点，审查范围与判定口径见 `prompts/plan-review.md`。
 
-- 标准模式：人工确认模块边界、依赖、契约
-- Auto 模式：可通过 `multi-agent-loop` 做独立 plan review，再由 controller 裁决
+- 标准模式：人工确认模块边界、依赖、契约（可选用 `prompts/plan-review.md` 作为 checklist 辅助）
+- Auto 模式：必须通过 `multi-agent-loop` + `prompts/plan-review.md` 做独立 plan review，再由 controller 裁决
 
 ## 步骤 5 — 按模块路由后续 worker
 
@@ -73,5 +73,6 @@ Epic workflow 完成时，应满足：
 - 所有需要的建模单元已就绪
 - `plan.md` 已通过校验
 - 每个模块都已按顺序调用对应 worker
+- 每个模块的 Upstream Coverage Matrix 已产出并通过 `scripts/check-upstream-coverage.sh`（多单元按 `guides/upstream-coverage.md` "Epic 多模块场景的调用方式" 分别校验）
 - 每个模块的最终状态都能由 checkpoint 清晰说明
 - orchestrator 能输出整个 Epic 当前是 `done`、`partially done` 还是 `blocked`

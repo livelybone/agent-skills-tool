@@ -1,6 +1,6 @@
 # Stage Handoff
 
-**Stage**: `<clarification | modeling | planning | tech-spec | test | implementation | verification>`
+**Stage**: `<intake | clarification | modeling | planning | tech-spec | test-design-and-implementation | feature-implementation | verification>`
 **Source Artifacts**:
 - `<path-or-summary-1>`
 - `<path-or-summary-2>`

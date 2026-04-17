@@ -50,7 +50,8 @@
 
 - 确认需要的建模单元都已就绪
 - 确认没有绕过 `modeling-first` 手编建模文件
-- 若本次走豁免：在 `WorkflowCheckpoint` 中记录结构化 `modeling_exemption`，并完成独立审查或人工确认
+- 建模审查：按 `guides/complexity.md` 的深度建议，决定是否追加独立审查（Medium/Complex 通常值得做，使用 `prompts/upstream-review.md`）
+- 若本次走豁免：在 `WorkflowCheckpoint` 中记录结构化 `modeling_exemption`，并通过 `prompts/exemption-review.md` 完成独立审查或人工确认
 
 回退：
 
@@ -79,6 +80,7 @@
 人工 gate：
 
 - 确认该模块的 technical spec 足以支持测试设计
+- 按 `guides/complexity.md` 的深度建议，决定是否追加独立第二视角审查
 
 回退：
 
@@ -95,6 +97,7 @@
 人工 gate：
 
 - 确认关键规则、主流程、危险边界都被转换成测试约束
+- 按 `guides/complexity.md` 的深度建议，决定是否追加独立审查
 
 回退：
 
@@ -109,6 +112,7 @@
 人工 gate：
 
 - 确认当前交付与 scope 对齐，未偷偷扩写流程外语义
+- 按 `guides/complexity.md` 的深度建议，决定实现后是否追加更深复核
 
 回退：
 
@@ -116,14 +120,24 @@
 
 ## 步骤 7 — Workflow Verification And Summary
 
-由 orchestrator 汇总：
+由 orchestrator 执行：
 
-- 当前阶段是否已完成
-- 是否仍有 blockers / unfinished items / residual risks
-- 下一次会话如何从 checkpoint 续接
+1. 运行 `scripts/check-upstream-coverage.sh` 对最终 Upstream Coverage Matrix 做机械校验（多单元场景按 `guides/upstream-coverage.md` "Epic 多模块场景的调用方式" 分别执行）
+2. 汇总：
+   - 当前阶段是否已完成
+   - 是否仍有 blockers / unfinished items / residual risks
+   - 下一次会话如何从 checkpoint 续接
+
+失败回退：
+
+- Matrix 校验 exit 2（虚假 upstream-ref 或 `<doc>#<anchor>` 不存在）→ 回退到产生非法引用的阶段（Spec/Test/Impl 均可能），由对应 worker 修复
+- Matrix 校验 exit 3（上游锚点未覆盖或 NOT APPLICABLE 理由缺失）→ 回退到 `feature-implementation-from-spec`，补齐覆盖行或追加有效 NOT APPLICABLE 理由
+- Matrix 校验 exit 4（矩阵 Spec/Test/Impl 位置失真：无效行号、无效后缀、无效 symbol）→ 回退到该位置所属阶段的 worker（Spec 列失真 → `tech-spec-writing`；Test 列失真 → `test-design-and-implementation`；Impl 列失真 → `feature-implementation-from-spec`），修复矩阵行或源文件
+- Matrix 校验 exit 5（matrix 文件 HTML 注释畸形）→ 由 orchestrator 修复 matrix 文件本身
 
 标准模式的完成条件：
 
 - 该 run 的 worker outputs 已按顺序产出
+- Upstream Coverage Matrix 已产出并通过 `scripts/check-upstream-coverage.sh`
 - `WorkflowCheckpoint` 已更新到最终状态
 - 用户可以清楚知道 workflow 当前是 `done` 还是 `blocked`
