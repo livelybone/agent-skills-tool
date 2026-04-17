@@ -7,9 +7,9 @@
    - 是否仍存在会改变实现边界的 `Blocking Questions`？
 
 2. **Test Readiness**
-   - 当前 spec 范围内的测试是否真实存在并可运行？
-   - 是否能看出哪些测试属于本次实现范围，并且每条都带 `Scenario ID` 与 `@scenario` / `@spec-ref`？
-   - spec 中每个声明的功能域是否都有对应的可执行测试？
+    - 当前 spec 范围内的测试是否真实存在并可运行？
+    - 是否能看出哪些测试属于本次实现范围，并且每条都带 `Scenario ID` 与 `@scenario` / `@spec-ref` / `@upstream`？
+    - spec 中每个声明的功能域是否都有对应的可执行测试？
 
 3. **Model Constraints**
    - 是否存在必须遵守的 `docs/models/<scenario>/<name>.md`？
@@ -42,7 +42,7 @@
 - `TechnicalSpec` 仍是 `Blocked`
 - 仍存在会改变实现语义的 `Blocking Questions` 或 spec 歧义
 - 当前 spec 范围内测试缺失或无法运行
-- 当前消费的测试缺少 `Scenario ID`、`@scenario` 或 `@spec-ref` 追溯
+- 当前消费的测试缺少 `Scenario ID`、`@scenario`、`@spec-ref` 或 `@upstream` 追溯
 - 某个 spec 功能域没有对应的可执行测试
 - 关键实现仍是 stub、`throw new Error('not implemented')` 或临时硬编码
 - spec、测试与模型之间存在语义冲突
@@ -54,7 +54,7 @@
 满足以下全部条件即可交付：
 
 - 当前 spec 范围内 baseline 失败已全部消除
-- 当前消费的测试具备 `Scenario ID` 与 `@scenario` / `@spec-ref` 最小追溯
+- 当前消费的测试具备 `Scenario ID` 与 `@scenario` / `@spec-ref` / `@upstream` 最小追溯
 - 每个 spec 功能域都有对应的可执行测试
 - 每个功能域都有生产级实现
 - 已运行本次相关验证命令并记录结果

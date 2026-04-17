@@ -54,6 +54,7 @@
     - 每个保留场景是否都带 `spec-ref` 和合法的 `upstream-ref`？
     - 每个场景是否能映射到一个或多个测试？
     - 每个已实现测试是否都带 `@scenario`、`@spec-ref`、`@upstream`？
+    - 测试文件位置和命名是否遵循仓库现有模式，或符合 `references/repo-structure.md`？
     - 被测模块能否成功 import？
     - 若不能，是否已建立无业务逻辑的 stub？
     - stub 是否只保证公开契约和 import 可解析，而没有偷带业务逻辑、硬编码返回值或真实副作用？

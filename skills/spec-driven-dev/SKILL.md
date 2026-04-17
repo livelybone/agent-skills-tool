@@ -180,6 +180,7 @@ Epic 的核心是：
 
 ### 本 skill 自身
 
+- `guides/complexity.md` — 标准模式下的复杂度分级与审查深度建议
 - `workflows/standard.md` — 标准模式的编排步骤
 - `workflows/auto.md` — Auto 模式的编排规则
 - `workflows/epic.md` — Epic 的建模 + plan + 模块路由规则

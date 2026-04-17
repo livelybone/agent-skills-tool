@@ -90,6 +90,7 @@ metadata:
     - 把全部 `[CRITICAL]` 场景和主要业务场景落实为行为测试
     - 凡是因 `Interfaces`、错误语义、权限边界或 `Non-Functional Constraints` 被保留的必测场景，也必须落实为可执行测试
     - 测试类型严格跟随场景上的 `CONTRACT / INTEGRATION / PROPERTY / UNIT` 标记，不在实现阶段二次改判；若发现标记不合理，应回到场景修订
+    - 测试文件位置和命名优先跟随仓库现有模式；若仓库没有现成约定，按 `references/repo-structure.md` 放置和命名
     - 测试应断言输入到输出/副作用，不断言内部状态存放位置
     - 每个场景都要有唯一 `Scenario ID`
     - 每个测试都要带最小追溯注释：`@scenario <Scenario ID>` + `@spec-ref <section>` + `@upstream <doc>#<anchor>`
@@ -191,6 +192,7 @@ Golden examples：见 `references/golden-examples.md`
 - [ ] 每个保留场景都有合法的 `upstream-ref`，或显式写出 `N/A + 具体理由`
 - [ ] 每个保留场景都已落实为可执行测试，或当前产物明确处于 `Blocked` 分支
 - [ ] 每个实现的测试都带 `@scenario`、`@spec-ref`、`@upstream` 最小追溯
+- [ ] 测试文件位置和命名符合仓库现有约定，或符合 `references/repo-structure.md`
 - [ ] 已通过 `multi-agent-loop` 完成测试代码跨 agent 审查，findings 已裁决
 - [ ] 不存在 `skip` / `todo` / `xit` / `xtest`、弱断言或仅验证导出的占位测试
 - [ ] 已过滤过度测试场景
@@ -229,5 +231,6 @@ Golden examples：见 `references/golden-examples.md`
 - `prompts/scenario-review.md` — 场景跨 agent 审查提示
 - `prompts/test-review.md` — 测试代码跨 agent 审查提示
 - `../spec-driven-dev/guides/upstream-ref.md` — `upstream-ref` 语法与落位规范
+- `references/repo-structure.md` — 测试文件位置与命名约定
 - `references/test-checklist.md` — 场景生成与测试实现清单
 - `references/golden-examples.md` — `Ready` / `Blocked` 示例
