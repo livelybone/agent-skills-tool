@@ -1,13 +1,13 @@
 ---
 name: multi-agent-loop
-description: 通过文件协议协调多个 coding agent（Claude、Codex、Crush、OpenCode）在有界循环中完成 review、discussion、implementation、verification、refactoring 等任务。
+description: 通过文件协议协调多个 coding agent（Claude、Codex、Crush、OpenCode）在有界循环中完成 review、discussion、verification 等结构化审查任务。
 metadata:
   version: 1.2.0
 ---
 
 # 适用场景
 
-- 需要让一个 coding agent 调用另一个 coding agent 做 review、discussion、implementation、verification、refactoring
+- 需要让一个 coding agent 调用另一个 coding agent 做 review、discussion、verification 等结构化审查任务
 - 需要多个独立视角，但不想把长日志直接灌进当前会话上下文
 - 需要有界循环，最多跑固定轮数，再由 controller 或用户裁决
 - 支持以下 runner：`claude`、`codex`、`crush`、`opencode`，可自由组合拓扑（如 `Claude → Crush`、`Claude → OpenCode` 等）
@@ -15,7 +15,7 @@ metadata:
 # 核心概念
 
 - **controller**：发起循环、读取 agent 结论、逐条裁决的角色（通常是当前会话里的 Claude Code）。不执行任务本身，只指挥和裁决。
-- **agent（主）**：被 controller 拉起、执行具体任务、把结构化发现写入 `agent-output.md` 的子进程。覆盖所有任务类型——review、discussion、implementation、verification、refactoring 均由 agent 角色承担。只报告观察到的事实和无法判断的点，不做裁决。
+- **agent（主）**：被 controller 拉起、执行具体任务、把结构化发现写入 `agent-output.md` 的子进程。当前 canonical prompt 协议覆盖 `review`、`discussion`、`verification` 这类结构化审查任务。只报告观察到的事实和无法判断的点，不做裁决。
 - **peer（副，可选）**：在 agent 已产出 `agent-output.md` 的前提下，读取该产出并提出独立意见（支持、质疑或补充），写入 `peer-output.md`。peer 是对 agent 结论的第二视角挑战，不是独立执行任务的角色。peer 同样只输出观点，不做裁决。
 - **角色选择原则**：需要执行一项任务（含审查）→ 用 agent；需要挑战 agent 已有结论 → 用 peer。审查已有产物（如 review Spec、review Test）属于"执行审查任务"，应使用 agent 角色而非 peer。
 - **关键澄清**：这里的"agent 调用 agent"是通过 CLI 子进程 + 文件协议完成的，不是模型内部原生互调。`claude -p` 与 `codex exec` 均作为独立子进程运行，输出不会污染 controller 的上下文。
@@ -32,7 +32,7 @@ metadata:
 2. **选定任务名**：每一轮执行都使用唯一的 `<task-name>`，工作目录为 `$WORKDIR/.agent-loop/<task-name>/`，多任务并行不冲突。
    - 推荐命名：`<step>-<module>-r1`、`<step>-<module>-r2`、`<step>-<module>-r3`
    - 禁止复用如 `review-spec-payment` 这样的固定 task-name 跑多轮；当前脚本会拒绝复用同角色产物，从而避免后续轮次覆盖前一轮的 `agent-output.md` / `peer-output.md`
-3. **写入本轮任务**：controller 将任务描述写入 `$WORKDIR/.agent-loop/<task-name>/agent-task.md`，参考 `templates/agent-prompt.txt`，要求 agent 只输出结构化发现，不输出推理过程或完整日志。
+3. **写入本轮任务**：controller 使用 `<SKILL_DIR绝对路径>/scripts/generate_task.sh` 基于 `templates/agent-prompt.txt` 生成当前 task 的协议文件。调用时传入 `<type> <task-name> <role>`，脚本会按 role 自动写入 `$WORKDIR/.agent-loop/<task-name>/agent-task.md` 或 `peer-task.md`。指令正文通过 stdin 或 HEREDOC 传入。只允许填入「类型」「角色」「指令」三个变量部分，禁止手写自由格式 prompt。
 4. **启动 agent**：`run_agent.sh` 默认是同步阻塞的。
    - **推荐入口**：优先使用 `--detach=auto`。有 `tmux` 时会自动脱离到独立 tmux session；没有 `tmux` 时回退到普通同步模式。
    - **controller 责任**：
@@ -41,8 +41,8 @@ metadata:
      - 使用 `--detach=none` 或不传 detach 参数时，controller 如需非阻塞，仍需自己做后台化（如 `run_in_background`、`&`）
    - **当前环境优先做法**：如果 controller 需要可靠的“立即返回后轮询”，优先确保宿主机有 `tmux` 并使用 `--detach=auto` 或 `--detach=tmux`
    - **命令格式约束**：构造 Bash 命令时，必须先将 `$SKILL_DIR` 解析为绝对路径字符串，然后在命令中直接使用该绝对路径字面量。**禁止**在 Bash 命令中使用 `$SKILL_DIR` 变量引用（如 `$SKILL_DIR/scripts/...`）或内联赋值（如 `SKILL_DIR="..." $SKILL_DIR/scripts/...`）。这确保命令格式一致，便于权限规则匹配。
-   - `codex` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex <task-name> <agent-task.md路径> agent <workdir>`
-      - ⚠️ macOS + Claude Code 环境下，必须以 `dangerouslyDisableSandbox: true` 调用（详见「已知平台问题」）。Codex 自身沙箱仍生效，安全性不受影响。
+    - `codex` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex <task-name> <agent-task.md路径> agent <workdir>`
+       - ⚠️ `run_agent.sh` 当前以 `codex exec --sandbox danger-full-access` 启动 Codex。macOS + Claude Code 环境下，还必须以 `dangerouslyDisableSandbox: true` 调用外层 Claude（详见「已知平台问题」）。
    - `claude` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude <task-name> <agent-task.md路径> agent <workdir>`
      - 无平台限制，可在任意环境直接运行。
    - `crush` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush <task-name> <agent-task.md路径> agent <workdir>`
@@ -73,12 +73,13 @@ metadata:
    - 明显正确且局部可执行 → 直接应用
    - 明显错误或脱离上下文 → 拒绝，记录原因
    - 涉及产品、架构、安全、权衡判断 → 暂停，升级给用户
-8. **需要第二视角时拉起 peer**：controller 编写单独的 peer 任务文件（如 `peer-task.md`），在指令中明确包含 `agent-output.md` 的路径，要求 peer 读取后给出独立意见。controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 agent 产物。controller 读取两份发现后再裁决。
+8. **需要第二视角时拉起 peer**：controller 为同一 `<task-name>` 生成 `peer-task.md`，并通过 stdin 提供 peer 的补充指令。`generate_task.sh` 会自动在 peer 指令块首行注入同目录下的 `agent-output.md` canonical 路径，`run_agent.sh` / `prompt_protocol.sh` 会同时校验该行存在且该 `agent-output.md` 文件已经产出，并且 canonical 文件本身不是 symlink，确保 peer 始终建立在当前 task 的主 agent 输出之上。controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 agent 产物。controller 读取两份发现后再裁决。
    - `codex` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex <task-name> <peer-task.md路径> peer <workdir>`
    - `claude` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude <task-name> <peer-task.md路径> peer <workdir>`
    - `crush` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush <task-name> <peer-task.md路径> peer <workdir>`
    - `opencode` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto opencode <task-name> <peer-task.md路径> peer <workdir>`
 9. **有界循环**：每一轮在执行层面独立——agent 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
+   - **先裁决后终止**：即使某轮表面上已经满足终止条件，controller 也必须先逐条裁决本轮发现，并对“明显正确且局部可执行”的问题先完成修复，再根据修复后的裁决结果判断继续/暂停/终止。禁止在未完成本轮裁决与可直接修复项处理前直接终止。
    - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
    - **继续条件**：经 controller 重新评估后，本轮存在至少一条被裁决为 Major 及以上的发现（无论是否已修复）→ 修复后**必须**启动下一轮，由新 agent 独立审查当前状态。**禁止以任何理由跳过验证轮**——包括但不限于"修复很简单"、"只是文档补充"、"不存在引入新问题的风险"、"可直接确认正确性"。这些都是 rationalization，不构成跳过验证的合法依据。
    - **暂停条件**：本轮存在无法判断的点 → 升级给用户裁决。用户裁决完成后，controller 根据继续/终止条件决定是否启动下一轮。
@@ -105,7 +106,7 @@ $WORKDIR/.agent-loop/
 
 ## `agent-task.md` / `peer-task.md` 编写方式
 
-controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基础模板，只需填入「类型」「角色」和「指令」三个字段。模板已包含硬性规则、级别定义和输出格式，不要另行简化或裁剪。
+controller 每轮写入任务文件时，必须使用 `scripts/generate_task.sh` 基于 `templates/agent-prompt.txt` 生成。调用方式：`<SKILL_DIR绝对路径>/scripts/generate_task.sh <type> <task-name> <role>`，指令正文固定从 stdin 读取，推荐用 HEREDOC 直接传入。脚本会根据 `task-name` 和 `role` 自动写入 canonical 路径：`$WORKDIR/.agent-loop/<task-name>/agent-task.md` 或 `peer-task.md`。其中 `peer-task.md` 会自动在指令块首行写入同目录的 `agent-output.md` 路径。模板中只有「类型」「角色」「指令」三部分允许变化，其余文本必须与模板逐字一致。`run_agent.sh` 会在启动前用同一套模板协议做严格校验；若 prompt 不是由模板规范生成、`type/role` 值不在模板定义的可选范围内、prompt-file 不位于当前 task 的 canonical 路径，或 canonical 文件是 symlink，会直接拒绝执行。
 
 ## `agent-output.md` 推荐格式
 
@@ -142,8 +143,13 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 - 升级条件必须明确：架构取舍、权限边界、安全风险
 - 不得宣称"agent 原生互调"；准确表述为"controller 通过 CLI 子进程启动 agent"
 - controller 裁决时必须独立判断严重度，不得直接采信 agent 标注。已知退化模式：后期轮次 agent 将 Minor 膨胀为 Major、将"修复未传播"包装为新发现
+- controller 必须先完成本轮裁决与可直接修复项处理，再判断是否终止；不得因为“表面满足终止条件”而提前停在未裁决状态
 - 结构化输出文件必须与原始日志文件分离
+- controller 必须用 `scripts/generate_task.sh` 通过 stdin 生成当前 task 的 `agent-task.md` / `peer-task.md`，不得手写自由格式 prompt
+- peer 任务必须建立在当前 task 的 `agent-output.md` 之上；该 canonical 路径由 generator 自动注入，validator 会同时校验路径文本、文件存在性和“不是 symlink”
 - `run_agent.sh` 会拒绝复用已存在同角色产物的 task-name；controller 看到该错误时，应新建下一轮目录而不是重试覆盖
+- `run_agent.sh` 会按 `templates/agent-prompt.txt` 做严格协议校验：除类型、角色、指令块外，其余文本必须与模板逐字一致；类型、角色的可选值也必须来自模板中的占位定义，避免 generator 和 validator 各自维护一份枚举
+- `run_agent.sh` 只接受当前 `<task-name>/<role>` 的 canonical prompt 路径：`agent-task.md` 或 `peer-task.md`；不会执行 task 目录外、其他轮次遗留、通过 symlink 伪装成 canonical 名称的 prompt 文件，或位于 symlink 父目录链下的伪 canonical 文件
 - `run_agent.sh` 现在会在异常退出（包括被 `TERM/HUP/INT` 打断）时将 `*-status.txt` 写为 `error`，避免遗留空状态文件误判为"仍在运行"
 - `--detach=tmux` 会在外层命令返回前预创建空的 `*-status.txt`；因此在该模式下，controller 可以立即开始轮询，而不必容忍“文件暂时不存在”的过渡窗口
 - `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断。注意：若 `run_agent.sh` 在参数校验阶段（参数不足、workdir 不存在、task-name 非法、role 非法、prompt 文件不存在）就退出，status 文件不会被创建——controller 应确保调用参数正确，这些是 controller 编程错误而非运行时失败
@@ -161,6 +167,7 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 6. 对 claude/crush/opencode 分别以各自的 task-name 执行 peer 角色（如 `test-claude` + `role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖对应 agent 产物
 7. 确认多个 task-name 并行不冲突
 8. 确认首次运行后 `.agent-loop/` 已被写入 `<repo>/.git/info/exclude`
+9. 用 `scripts/generate_task.sh` 为某个 task 生成标准 prompt，确认文件落在 `.agent-loop/<task-name>/` 下且 `run_agent.sh` 接受；其中 peer prompt 需自动包含同目录 `agent-output.md` 路径。再手动改坏任一固定章节文本、移除 peer 的 canonical `agent-output.md` 行、将类型改成模板外值、改用 task 目录外的 prompt-file，或将 canonical prompt / `agent-output.md` / task 目录父链替换为 symlink，确认 `run_agent.sh` 直接拒绝
 
 # 已知平台问题
 
@@ -169,7 +176,7 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 | macOS + Claude Code sandbox | `codex`    | Claude Code sandbox 阻止访问 macOS `SCDynamicStore` 系统守护进程，导致 Codex CLI 的 `system-configuration` crate panic | controller 启动 `codex` agent 时必须禁用 sandbox（`dangerouslyDisableSandbox: true`），或改用 `claude` runner（不受此影响） |
 | macOS + Claude Code sandbox | `crush`    | **未验证**：Crush 基于 Go，可能触发类似系统调用限制                                                                     | 优先尝试 sandbox 内运行；若失败则 `dangerouslyDisableSandbox: true`                                                         |
 | macOS + Claude Code sandbox | `opencode` | **未验证**：OpenCode 基于 Node.js，可能触发类似限制                                                                     | 同上                                                                                                                        |
-| 任意                        | `crush`    | `crush run` + tool calling（文件写入等）存在[已知 bug](https://github.com/charmbracelet/crush/issues/1322)              | 仅用于 review/discussion 等只读任务；implementation 任务优先用 `claude` 或 `codex`                                           |
+| 任意                        | `crush`    | `crush run` + tool calling（文件写入等）存在[已知 bug](https://github.com/charmbracelet/crush/issues/1322)              | 仅用于 review/discussion/verification 等只读任务                                                                               |
 
 # 不覆盖范围
 
@@ -181,6 +188,8 @@ controller 每轮写入任务文件时，以 `templates/agent-prompt.txt` 为基
 # 引用资料
 
 - `$SKILL_DIR/scripts/run_agent.sh` — runner 包装脚本，controller 通过它启动 agent（推荐用 `--detach=auto` 让脚本自行决定是否脱离）
+- `$SKILL_DIR/scripts/generate_task.sh` — controller 生成标准 `agent-task.md` / `peer-task.md` 的入口；传入 `<type> <task-name> <role>` 后自动写入对应 task 目录，正文固定通过 stdin / HEREDOC 传入
+- `$SKILL_DIR/scripts/prompt_protocol.sh` — generator 与 runner 共享的模板协议解析与校验逻辑；负责 peer 的 canonical `agent-output.md` 注入与校验
 - `$SKILL_DIR/templates/agent-prompt.txt` — controller 每轮写入 `agent-task.md` / `peer-task.md` 时参考的模板，填入具体任务描述后发给 agent 或 peer
 - 本机 CLI 自检：`codex exec --help`
 - 本机 CLI 自检：`claude --help`

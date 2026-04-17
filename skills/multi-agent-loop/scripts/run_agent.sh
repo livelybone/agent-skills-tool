@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/prompt_protocol.sh"
+
 DETACH_MODE="none"
 PREPARED_STATUS_FILE=0
 while [[ $# -gt 0 ]]; do
@@ -50,7 +53,7 @@ TASK_NAME="$2"
 PROMPT_FILE="$3"
 ROLE="$4"
 WORKDIR="${5:-$PWD}"
-SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+SELF_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 
 # TASK_NAME 合法性校验：仅允许字母、数字、连字符、下划线、点（但不能是纯 "." 或 ".."）
 if [[ ! "$TASK_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
@@ -75,11 +78,13 @@ fi
 
 case "$ROLE" in
   agent)
+    EXPECTED_PROMPT_FILE="$TASK_DIR/agent-task.md"
     OUTPUT_FILE="$TASK_DIR/agent-output.md"
     LOG_FILE="$TASK_DIR/agent.log"
     STATUS_FILE="$TASK_DIR/agent-status.txt"
     ;;
   peer)
+    EXPECTED_PROMPT_FILE="$TASK_DIR/peer-task.md"
     OUTPUT_FILE="$TASK_DIR/peer-output.md"
     LOG_FILE="$TASK_DIR/peer.log"
     STATUS_FILE="$TASK_DIR/peer-status.txt"
@@ -113,6 +118,14 @@ write_status() {
   STATUS_WRITTEN=1
 }
 
+finalize_prelaunch_status() {
+  local exit_code=$?
+  if [[ ${STATUS_WRITTEN:-0} -eq 0 && $exit_code -ne 0 ]]; then
+    write_status "error"
+  fi
+  exit "$exit_code"
+}
+
 case "$RUNNER" in
   codex|claude|crush|opencode)
     ;;
@@ -127,6 +140,21 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
     write_status "error"
   fi
   echo "prompt file not found: $PROMPT_FILE" >&2
+  exit 2
+fi
+
+if [[ "$PROMPT_FILE" != "$EXPECTED_PROMPT_FILE" ]]; then
+  if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
+    write_status "error"
+  fi
+  echo "prompt file must be canonical for task/role: expected $EXPECTED_PROMPT_FILE, got $PROMPT_FILE" >&2
+  exit 2
+fi
+
+if ! prompt_protocol_validate_prompt_file "$PROMPT_FILE" "$ROLE"; then
+  if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
+    write_status "error"
+  fi
   exit 2
 fi
 
@@ -151,6 +179,7 @@ if [[ "$DETACH_MODE" == "tmux" ]]; then
 
   mkdir -p "$TASK_DIR"
   : > "$STATUS_FILE"
+  trap finalize_prelaunch_status EXIT
   ensure_git_exclude
 
   DETACH_SESSION="agent-loop-${TASK_NAME//[^a-zA-Z0-9_.-]/-}-$$"
@@ -159,6 +188,7 @@ if [[ "$DETACH_MODE" == "tmux" ]]; then
     write_status "error"
     exit 1
   fi
+  trap - EXIT
   echo "detached:$DETACH_SESSION"
   exit 0
 fi

@@ -1,6 +1,6 @@
 # 任务
 
-- 类型：<review | discussion | implementation | verification | refactoring>
+- 类型：<review | discussion | verification>
 - 角色：<agent | peer>
 
 # 指令
