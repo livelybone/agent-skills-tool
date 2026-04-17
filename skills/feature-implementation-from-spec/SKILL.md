@@ -16,8 +16,8 @@ metadata:
 
 ## 适用场景
 
-- 已有 `TechnicalSpec`，且状态为 `Ready for implementation`
-- 已有来自 `test-design-and-implementation` 的可执行测试，需要把红测变绿
+- 已有 `TechnicalSpec`，且状态为 `Ready for test/design`（tech-spec-writing 的终态）
+- 已有来自 `test-design-and-implementation` 的测试产物，状态为 `Ready for implementation`（即已完成 Red Run），需要把红测变绿
 - 需要按既有规则、契约、状态变化和测试约束实现功能
 - 需要交付可评审、可进入 CI 的 `DeliveredChange`
 
@@ -34,19 +34,22 @@ metadata:
 ## 执行步骤
 
 1. **检查实现前提**
-    - 读取 `Goal / Scope / Non-Goals / Acceptance Signals / Rules / Interfaces / States / State Transitions / Non-Functional Constraints / Blocking Questions / Open Questions`
-    - 确认状态为 `Ready for implementation`
+    - 读取 `Goal / Scope / Non-Goals / Acceptance Signals / Rules / Interfaces / States / State Transitions / Non-Functional Constraints / Upstream Models / Blocking Questions / Open Questions`
+    - 若 `Upstream Models` 非 `N/A`：按其列出的建模文件逐一读取，把不变量、派生关系、关系约束、状态机当作实现必须守住的约束（此处是实现阶段发现模型约束的单一真源，下游任何锚点覆盖都以此为准）
+    - 确认 `TechnicalSpec.Status = Ready for test/design`，且本次消费的测试产物 `Status = Ready for implementation`
     - 确认本次要消费的测试真实存在、覆盖当前 spec 主路径与每个声明的功能域，且带 `Scenario ID` 与 `@scenario` / `@spec-ref` / `@upstream` 最小追溯
     - 若测试缺少 `Scenario ID`、`@scenario`、`@spec-ref` 或 `@upstream`，停止实现并回退到 `test-design-and-implementation`
    - 若某个 spec 功能域没有对应的可执行测试，停止实现并回退到 `test-design-and-implementation`
    - 若仍存在 `Blocking Questions`，或存在会改变实现语义的 spec 歧义：停止实现并回退到 `tech-spec-writing`
    - 若 spec、测试与模型之间存在矛盾：停止实现，回退到上游修订
+   - 使用 `references/implementation-checklist.md` 的「实现前」一节做快速自检，确认以上每项均已落地
 
 2. **记录 Baseline Test Run**
    - 在写实现代码前，先运行当前 spec 范围内的全部测试
    - 记录失败项，并区分：
      - 属于当前 spec 范围的失败：这是本次必须消除的工作，不算预存在问题
      - 不属于当前 spec 范围的失败：记录为预存在问题，但不要顺手修 unrelated 问题
+   - 若当前 spec 范围内的测试在 baseline 就全部通过（上游测试阶段应为 Red Run），停止实现并回退到 `test-design-and-implementation`：要么测试并未真正覆盖 spec 能力，要么该能力已在上一轮实现。不得在无红测约束的情况下继续
 
 3. **锁定实现范围**
     - 从 spec 中提取本次必须交付的功能域、服务、组件或流程
@@ -72,6 +75,8 @@ metadata:
 
 7. **交棒下游**
    - 向评审或 CI 交付 `DeliveredChange`
+   - review 与 CI 的消费入口为 `DeliveredChange` 的 `Spec Completeness Matrix` / `Upstream Coverage Matrix` / `Validation` / `Blockers` 四节；这些节缺失或与实现/测试不对齐时，下游应当拒收并回退
+   - 触发独立审查（跨 agent review）的最小条件：① `Upstream Models` 非 `N/A` 且包含不变量 / 派生关系 / 跨模块关系；② `Residual Risks` 非空；③ 本次改动跨越多个功能域或触及契约/状态机。满足任一，由上层（`spec-driven-dev` 编排或 `multi-agent-loop` controller）发起 peer review；上述条件都不满足时，可由 CI + 模板自检兜底
    - 若状态为 `Blocked`，明确指出阻塞原因与未完成项，不交付伪完成结果
 
 ## 产物与格式
@@ -105,6 +110,7 @@ Golden examples：见 `references/golden-examples.md`
 ### 验收标准
 
 - 当前 spec 范围内的测试已从 baseline 失败变为通过
+- 与本次改动相关的 typecheck / lint / build 等本地验证命令已全部通过；任一失败即不得标记 `Delivered`
 - spec 中定义的每个功能域、服务或组件都有生产级实现，而非 stub
 - spec 中定义的每个功能域、服务或组件都有真实的对应测试证据，而不是空列或占位符
 - 实现未越界修改需求、技术文档或已批准测试的语义
@@ -118,7 +124,7 @@ Golden examples：见 `references/golden-examples.md`
 
 ### 本 skill 特定检查
 
-- [ ] `TechnicalSpec` 为 `Ready for implementation`
+- [ ] `TechnicalSpec.Status = Ready for test/design` 且测试产物 `Status = Ready for implementation`
 - [ ] 已执行 Baseline Test Run，并区分范围内失败与无关失败
 - [ ] 当前消费的测试带 `Scenario ID` 与 `@scenario` / `@spec-ref` / `@upstream` 最小追溯；若缺失，已停止并回退上游
 - [ ] 每个 spec 功能域都有对应的可执行测试；若缺失，已停止并回退到 `test-design-and-implementation`
@@ -126,7 +132,7 @@ Golden examples：见 `references/golden-examples.md`
 - [ ] 只修改当前 spec 范围内的实现代码，未擅自改写批准测试
 - [ ] 每个 spec 功能域都有生产级实现，没有 stub 残留
 - [ ] 每个相关模型锚点都在 `Upstream Coverage Matrix` 中被覆盖，并保留精确的 `Scenario ID`（或显式 `N/A`）与 `spec-ref`；若 `NOT APPLICABLE`，也必须写明对应的 `spec-ref`
-- [ ] 本次相关验证命令已运行，结果已记录
+- [ ] 本次相关验证命令（typecheck / lint / build 等）已运行且全部通过；任一失败阻止 `Delivered`
 - [ ] 若遇到 spec / test / model 语义冲突，已停止并显式阻塞，而不是自行猜测
 
 ## 验证方式
@@ -157,3 +163,5 @@ Golden examples：见 `references/golden-examples.md`
 - `assets/templates/delivered-change.md` — 标准交付模板
 - `references/implementation-checklist.md` — 实现前后检查清单
 - `references/golden-examples.md` — `Delivered` / `Blocked` 示例
+- `../spec-driven-dev/guides/upstream-coverage.md` — `Upstream Coverage Matrix` 的权威结构与机械校验规则
+- `../spec-driven-dev/guides/upstream-ref.md` — `upstream-ref` / `@upstream` 的语法、锚点命名与各阶段落位方式
