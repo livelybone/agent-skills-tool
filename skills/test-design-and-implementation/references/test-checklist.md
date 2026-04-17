@@ -1,6 +1,6 @@
 # Test Checklist
 
-在开始设计测试与审查已实现测试前，优先确认以下 12 类信息：
+在开始设计测试与审查已实现测试前，优先按以下顺序确认这 12 类信息（条目排列即默认优先级）：
 
 1. **Acceptance Signals**
    - 什么结果算该 `TechnicalSpec` 成立？
@@ -46,7 +46,7 @@
     - 是否已通过跨 agent 审查检查 `Scenario -> Test` 翻译是否完整？
     - 每个高风险场景是否都有对应测试，且关键断言没有缺口？
     - 是否存在测试越出场景边界、偷偷扩展语义或转而测试实现路径？
-    - 是否存在 `@scenario` / `@upstream` 断链、错链或伪造引用？
+    - 是否存在 `@scenario` / `@spec-ref` / `@upstream` 断链、错链或伪造引用？
     - 是否存在 `skip` / `todo` / `xit` / `xtest`、弱断言或只验证导出/文件存在的假完成测试？
 
 12. **Traceability And Red Run Preconditions**
@@ -58,23 +58,6 @@
     - 被测模块能否成功 import？
     - 若不能，是否已建立无业务逻辑的 stub？
     - stub 是否只保证公开契约和 import 可解析，而没有偷带业务逻辑、硬编码返回值或真实副作用？
-
-## 设计优先级
-
-默认优先顺序：
-
-1. Acceptance Signals
-2. Main Flow
-3. Rules
-4. Interfaces
-5. States
-6. Failure And Edge Cases
-7. Non-Functional Constraints
-8. Scenario Marking
-9. Scenario Review
-10. Overtest Filter
-11. Test Review
-12. Traceability And Red Run Preconditions
 
 ## 何时可以停止补写场景
 

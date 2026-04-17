@@ -41,5 +41,16 @@
 ## Status
 - Ready for implementation | Blocked
 
+## Red Run
+
+> 仅在 `Status = Ready for implementation` 时填写；`Blocked` 时整节删除或保留 "N/A (Blocked)"。
+
+- Command: `<运行本次新增/修改测试的命令>`
+- Executed Tests: `<S-1, S-2, ... 对应的测试用例清单>`
+- Expected Failure Mode: `<not implemented / stub throws / feature 未接线>`
+- Observed Failures:
+  - `<Scenario ID> — <失败信息>`
+- Unexpected Signals: `<import 错误、语法错误等；若无则写 "none"；有则说明已如何修正后重跑>`
+
 > If `Status = Blocked`, explain the blocking reason in `Coverage Notes`.
 > If `Status = Ready for implementation`, every implemented test should carry `@scenario <Scenario ID>`, `@spec-ref <section>`, and `@upstream <doc>#<anchor>` or `@upstream N/A + <reason>`.

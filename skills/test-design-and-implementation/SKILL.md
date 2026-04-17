@@ -41,7 +41,7 @@ metadata:
 
 2. **生成测试场景**
     - 用 `assets/templates/test-scenarios.md` 产出人类可读场景
-    - 场景优先级遵循：`CONTRACT > INTEGRATION > PROPERTY`
+    - 场景优先级遵循：`CONTRACT > INTEGRATION > PROPERTY > UNIT`
     - 上面是**测试形态优先级**；`references/test-checklist.md` 中的是**信息采集优先级**，两者用途不同
     - 每个保留场景都必须带最小追溯：`spec-ref` + `upstream-ref`
     - `upstream-ref` 的语法、`N/A` 规则和合法路径以 `../spec-driven-dev/guides/upstream-ref.md` 为唯一权威；测试阶段只负责按该规范落位，不在本 skill 内重定义
@@ -102,7 +102,7 @@ metadata:
 7. **审查测试代码（跨 agent）**
     - 必须通过 `multi-agent-loop` 发起独立审查，使用 `prompts/test-review.md` 作为审查指令正文模板来审查当前测试文件
     - 审查目标是检查 `Test Scenarios -> Executable Tests` 的翻译是否完整、准确，并识别追溯断链、缺测、断言不完整、越界测试和 overtest
-    - 必查项：每个测试的 `@scenario` 和 `@upstream` 是否存在且合法；是否与对应场景一致；每个场景是否都有对应测试；`[CRITICAL]` 场景的关键断言是否完整；测试是否越出场景边界；是否存在实现细节耦合或低价值冗余
+    - 必查项：每个测试的 `@scenario`、`@spec-ref`、`@upstream` 三元组是否存在且合法；是否与对应场景一致；每个场景是否都有对应测试；`[CRITICAL]` 场景的关键断言是否完整；测试是否越出场景边界；是否存在实现细节耦合或低价值冗余
     - 若发现问题会改变场景边界：回到场景修订，并在必要时重新执行场景审查
     - 若只是测试翻译质量问题：先修测试并完成 findings 裁决，再进入 Red Run
 
@@ -114,7 +114,7 @@ metadata:
     - 若测试意外通过、import 错误或语法错误，先修测试/stub 再重跑
 
 9. **交棒下游**
-    - 把可执行测试套件交给功能实现阶段（当前是通用下游阶段；未来可由 `feature-implementation-from-spec` 消费）
+    - 把可执行测试套件交给功能实现阶段
 
 ## 产物与格式
 
@@ -164,15 +164,11 @@ Golden examples：见 `references/golden-examples.md`
 
 ### 验收标准
 
+> 本节只陈述 outcome（"完成"的语义）；可核对的清单项见下方 `质量门槛`。
+
 - `Status = Ready for implementation` 时：下游看到场景和测试后，能直接开始功能实现
-- `Status = Ready for implementation` 时：`[CRITICAL]` 场景和主流程已落实为可执行测试
-- 若 spec 存在外部契约、权限边界或错误语义，至少一个 `[CONTRACT]` 场景已落地
-- 若 spec 存在可测试的非功能约束，相应场景已落地
-- 仅有 stub、仅验证导出存在、或仅有场景稿而无测试，不算完成
-- 所有必保留场景均已落实为可执行测试，而非只停留在场景稿
-- `Status = Ready for implementation` 时：场景审查与测试代码审查均已完成，且 findings 已裁决
-- `Status = Ready for implementation` 时：Red Run 已执行，失败原因符合预期
 - `Status = Blocked` 时：只产出场景稿并明确阻塞原因，不进入测试实现或 Red Run
+- 仅有 stub、仅验证导出存在、或仅有场景稿而无测试，不算完成
 - 产物不依赖实现细节或私有 helper
 
 ## 质量门槛
@@ -209,7 +205,7 @@ Golden examples：见 `references/golden-examples.md`
 
 1. 让阅读者回答：哪些场景最重要、哪些是危险边界？
 2. 让阅读者回答：测试在保护哪些业务规则、验收信号和非功能约束？
-3. 让阅读者回答：每个高风险场景分别由哪些测试保护，这些测试的 `@scenario` / `@upstream` 是否能串起完整追溯链？
+3. 让阅读者回答：每个高风险场景分别由哪些测试保护，这些测试的 `@scenario` / `@spec-ref` / `@upstream` 是否能串起完整追溯链？
 4. 若 `Status = Ready for implementation`，运行本次新增测试，确认它们因未实现而失败，而非因测试本身损坏而失败
 5. 若 `Status = Blocked`，确认阻塞原因已被清晰记录，且未进入测试实现或 Red Run
 6. 若 1-5 中任一回答为否，说明场景或测试仍不够清晰
