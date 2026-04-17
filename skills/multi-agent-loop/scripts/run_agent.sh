@@ -6,14 +6,15 @@ source "$SCRIPT_DIR/prompt_protocol.sh"
 
 DETACH_MODE="none"
 PREPARED_STATUS_FILE=0
+SKIP_JUDGMENT_CHECK=0
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
     --prepared-status-file)
       PREPARED_STATUS_FILE=1
       shift
       ;;
-    --detach-tmux)
-      DETACH_MODE="tmux"
+    --skip-judgment-check)
+      SKIP_JUDGMENT_CHECK=1
       shift
       ;;
     --detach=*)
@@ -44,7 +45,7 @@ case "$DETACH_MODE" in
 esac
 
 if [[ $# -lt 4 ]]; then
-  echo "usage: $0 [--detach=auto|tmux|none] [--detach-tmux] <runner: codex|claude|crush|opencode> <task-name> <prompt-file> <role: agent|peer> [workdir]" >&2
+  echo "usage: $0 [--detach=auto|tmux|none] [--skip-judgment-check] <runner: codex|claude|crush|opencode> <task-name> <prompt-file> <role: agent|peer> [workdir]" >&2
   exit 2
 fi
 
@@ -156,6 +157,48 @@ if ! prompt_protocol_validate_prompt_file "$PROMPT_FILE" "$ROLE"; then
     write_status "error"
   fi
   exit 2
+fi
+
+# Judgment gate: before launching a new agent round, every previously
+# completed agent or peer run in this workdir must have its own written
+# judgment file (agent-judgment.md for agent findings, peer-judgment.md
+# for peer findings) capturing the controller's re-evaluation. This is
+# the forcing function against "autopilot Critical-fixing"—see SKILL.md.
+# Only enforced on fresh agent launches (peer reruns stay within a task).
+# Use --skip-judgment-check to bypass for historical cleanup or unit tests.
+if [[ "$ROLE" == "agent" && "$SKIP_JUDGMENT_CHECK" -eq 0 && "$PREPARED_STATUS_FILE" -eq 0 ]]; then
+  missing_judgments=()
+  loop_dir="$WORKDIR/.agent-loop"
+  if [[ -d "$loop_dir" ]]; then
+    for existing_task_dir in "$loop_dir"/*/; do
+      [[ -d "$existing_task_dir" ]] || continue
+      existing_task_name="$(basename "$existing_task_dir")"
+      [[ "$existing_task_name" == "$TASK_NAME" ]] && continue
+      for sub_role in agent peer; do
+        status_file="${existing_task_dir}${sub_role}-status.txt"
+        output_file="${existing_task_dir}${sub_role}-output.md"
+        judgment_file="${existing_task_dir}${sub_role}-judgment.md"
+        if [[ -f "$status_file" && -f "$output_file" ]]; then
+          status_content="$(< "$status_file")"
+          if [[ "$status_content" == "done" && ( ! -s "$judgment_file" ) ]]; then
+            missing_judgments+=("$judgment_file")
+          fi
+        fi
+      done
+    done
+  fi
+  if (( ${#missing_judgments[@]} > 0 )); then
+    echo "judgment gate: cannot launch new task while prior runs lack a controller judgment." >&2
+    echo "Missing judgment files:" >&2
+    for f in "${missing_judgments[@]}"; do
+      echo "  - $f" >&2
+    done
+    echo "Write one line per finding in each missing file, format:" >&2
+    echo "  [<id>] <agent|peer>:<Severity> → controller:<Severity>  reason: <one-line justification>" >&2
+    echo "See SKILL.md §「controller 裁决与 judgment 文件」 for details." >&2
+    echo "Pass --skip-judgment-check to bypass (e.g., for historical cleanup)." >&2
+    exit 2
+  fi
 fi
 
 if [[ "$DETACH_MODE" == "auto" ]]; then

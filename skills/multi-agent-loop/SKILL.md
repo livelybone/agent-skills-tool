@@ -2,7 +2,7 @@
 name: multi-agent-loop
 description: 通过文件协议协调多个 coding agent（Claude、Codex、Crush、OpenCode）在有界循环中完成 review、discussion、verification 等结构化审查任务。
 metadata:
-  version: 1.2.0
+  version: 2.2.0
 ---
 
 # 适用场景
@@ -21,63 +21,60 @@ metadata:
 - **关键澄清**：这里的"agent 调用 agent"是通过 CLI 子进程 + 文件协议完成的，不是模型内部原生互调。`claude -p` 与 `codex exec` 均作为独立子进程运行，输出不会污染 controller 的上下文。
 
 # 必须材料
-
+judgement
 - 当前环境至少安装一个可无头执行的 agent CLI：`codex`、`claude`、`crush` 或 `opencode`
 - `$SKILL_DIR/scripts/run_agent.sh`（`$SKILL_DIR` 指本 skill 的安装目录，即包含此 `SKILL.md` 的目录）
+- `$SKILL_DIR/scripts/validate_task.sh` + `$SKILL_DIR/scripts/prompt_protocol.sh`（合成自检与 runner 协议校验共享）
+- `$SKILL_DIR/templates/agent-prompt.txt`（合成 `agent-task.md` / `peer-task.md` 的模板源文件）
 - 每一轮执行都必须有唯一的任务名（task-name），用于隔离工作目录；禁止把不同轮次复用到同一个 task-name
+- `run_agent.sh` 首次运行会自动将 `.agent-loop/` 加入 `<workdir>/.git/info/exclude`，避免协议文件污染 agent 的仓库视图
 
 # 执行步骤
 
 1. **确认拓扑**：明确谁是 controller，谁是 agent，是否需要 peer。
-2. **选定任务名**：每一轮执行都使用唯一的 `<task-name>`，工作目录为 `$WORKDIR/.agent-loop/<task-name>/`，多任务并行不冲突。
-   - 推荐命名：`<step>-<module>-r1`、`<step>-<module>-r2`、`<step>-<module>-r3`
-   - 禁止复用如 `review-spec-payment` 这样的固定 task-name 跑多轮；当前脚本会拒绝复用同角色产物，从而避免后续轮次覆盖前一轮的 `agent-output.md` / `peer-output.md`
-3. **写入本轮任务**：controller 使用 `<SKILL_DIR绝对路径>/scripts/generate_task.sh` 基于 `templates/agent-prompt.txt` 生成当前 task 的协议文件。调用时传入 `<type> <task-name> <role>`，脚本会按 role 自动写入 `$WORKDIR/.agent-loop/<task-name>/agent-task.md` 或 `peer-task.md`。指令正文通过 stdin 或 HEREDOC 传入。只允许填入「类型」「角色」「指令」三个变量部分，禁止手写自由格式 prompt。
-4. **启动 agent**：`run_agent.sh` 默认是同步阻塞的。
-   - **推荐入口**：优先使用 `--detach=auto`。有 `tmux` 时会自动脱离到独立 tmux session；没有 `tmux` 时回退到普通同步模式。
-   - **controller 责任**：
-     - 使用 `--detach=tmux` 时，`run_agent.sh` 会在返回前预创建空的 `*-status.txt`，controller 可立即开始轮询，**不要再额外追加 `&`**
-     - 使用 `--detach=auto` 时，若当前机器装有 `tmux`，行为与 `--detach=tmux` 相同；若没有 `tmux`，则退化为同步阻塞模式
-     - 使用 `--detach=none` 或不传 detach 参数时，controller 如需非阻塞，仍需自己做后台化（如 `run_in_background`、`&`）
-   - **当前环境优先做法**：如果 controller 需要可靠的“立即返回后轮询”，优先确保宿主机有 `tmux` 并使用 `--detach=auto` 或 `--detach=tmux`
-   - **命令格式约束**：构造 Bash 命令时，必须先将 `$SKILL_DIR` 解析为绝对路径字符串，然后在命令中直接使用该绝对路径字面量。**禁止**在 Bash 命令中使用 `$SKILL_DIR` 变量引用（如 `$SKILL_DIR/scripts/...`）或内联赋值（如 `SKILL_DIR="..." $SKILL_DIR/scripts/...`）。这确保命令格式一致，便于权限规则匹配。
-    - `codex` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex <task-name> <agent-task.md路径> agent <workdir>`
-       - ⚠️ `run_agent.sh` 当前以 `codex exec --sandbox danger-full-access` 启动 Codex。macOS + Claude Code 环境下，还必须以 `dangerouslyDisableSandbox: true` 调用外层 Claude（详见「已知平台问题」）。
-   - `claude` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude <task-name> <agent-task.md路径> agent <workdir>`
-     - 无平台限制，可在任意环境直接运行。
-   - `crush` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush <task-name> <agent-task.md路径> agent <workdir>`
-     - 通过 `crush run` 非交互模式执行，需预先配置 provider。
-   - `opencode` 主 agent：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto opencode <task-name> <agent-task.md路径> agent <workdir>`
-     - 通过 `opencode run` 非交互模式执行，支持内置免费模型或自配 provider。
-   - 自动脱离模式：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto <runner> <task-name> <agent-task.md路径> agent <workdir>`
-     - 有 `tmux` 时自动使用独立 tmux session
-     - 没有 `tmux` 时自动回退到普通同步模式
-   - `tmux` 脱离模式：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=tmux <runner> <task-name> <agent-task.md路径> agent <workdir>`
-     - 适用于 controller 的宿主环境会在命令返回后清理后台子进程的情况
-     - runner 会在独立的 tmux session 中执行，stdout 返回 `detached:<session-name>`
-     - `*-status.txt` 会在命令返回前以空文件形式创建，因此 controller 可以立即轮询；若文件不存在，仍应视为参数校验失败
-   - 显式禁用脱离：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=none <runner> <task-name> <agent-task.md路径> agent <workdir>`
-     - 强制使用当前进程模型
-   - 兼容别名：`--detach-tmux`
-     - 等价于 `--detach=tmux`
+2. **选定任务名**：每一轮执行都使用唯一的 `<task-name>`，工作目录为 `$WORKDIR/.agent-loop/<task-name>/`，多任务并行不冲突。推荐命名：`<step>-<module>-r1`、`<step>-<module>-r2`……（runner 会拒绝复用已存在同角色产物的 task-name，看到该错误时新建下一轮目录，不要重试覆盖）
+3. **合成本轮任务**：controller 亲自读取 `templates/agent-prompt.txt` 与 task-module（可以是一个已有的 prompt 模块文件如 `skills/test-design-and-implementation/prompts/scenario-review.md`，也可以是用户当前会话里临时给出的一段文字），按「`agent-task.md` / `peer-task.md` 合成契约」智能合成本轮 prompt，写入 canonical 路径 `$WORKDIR/.agent-loop/<task-name>/agent-task.md`（peer 写 `peer-task.md`）。写完后**必须**先用 `<SKILL_DIR绝对路径>/scripts/validate_task.sh <task-name> <role> [workdir]` 自检（`workdir` 省略时默认为 `$PWD`，controller 的 cwd 不在目标 workdir 时必须显式传）；validator 通过后再进入步骤 4。契约细节见下文「`agent-task.md` / `peer-task.md` 合成契约」。
+4. **启动 agent**：
+   - **通用命令**：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto <runner> <task-name> <agent-task.md路径> agent <workdir>`
+     - `<runner>` ∈ `codex | claude | crush | opencode`
+     - `<agent-task.md路径>` 必须是 canonical 路径 `<workdir>/.agent-loop/<task-name>/agent-task.md`
+   - **detach 模式**：
+     - `--detach=auto`（推荐）：有 `tmux` 用独立 session，没 `tmux` 退化为同步阻塞
+     - `--detach=tmux`：强制 tmux；宿主会清理后台子进程时用这个。stdout 返回 `detached:<session>`，`*-status.txt` 在返回前以空文件预创建，controller 可立即轮询
+     - `--detach=none` 或省略：同步阻塞；controller 如需非阻塞需自己后台化
+   - **runner 差异**：
+     - `codex`：`codex exec --sandbox danger-full-access`。macOS + Claude Code 环境下外层 Claude 还必须以 `dangerouslyDisableSandbox: true` 调用（详见「已知平台问题」）
+     - `claude`：无平台限制
+     - `crush` / `opencode`：通过各自 `run` 非交互模式执行，需预先配置 provider（opencode 支持内置免费模型）
+   - **命令格式约束**：构造 Bash 命令时必须先将 `$SKILL_DIR` 解析为绝对路径字面量再拼接。禁止 `$SKILL_DIR/scripts/...` 变量引用或 `SKILL_DIR="..." $SKILL_DIR/scripts/...` 内联赋值——权限规则按字面量匹配
 5. **轮询等待 agent 完成**：agent 执行耗时因任务复杂度差异很大（数秒到数分钟均属正常），controller 需要耐心等待，通过定时轮询 `*-status.txt` 判断是否完成：
    - 轮询间隔：每 **30 秒** 检查一次 `agent-status.txt`（或 `peer-status.txt`）
    - 超时上限：**10 分钟**；超时后视为 error，记录日志并升级给用户
-   - 判断逻辑：文件内容为 `done` → 成功完成；`error` → 失败；空 → 仍在运行。正常流程中 status 文件在参数校验通过后立即创建（空文件），因此"文件不存在"不是合法的运行中状态——它意味着参数校验失败（controller 编程错误），controller 应检查调用参数而非继续轮询
+   - 判断逻辑：文件内容为 `done` → 成功完成；`error` → 失败（含 agent 异常退出 `TERM/HUP/INT`）；空 → 仍在运行。正常流程中 status 文件在所有 prelaunch 校验通过后立即创建（空文件），因此"文件不存在"不是合法的运行中状态——它意味着 runner 在 prelaunch 阶段被拒绝：参数校验失败 / prompt 协议校验失败 / 同角色产物已存在（复用拦截）。例外：`--detach=tmux` 在外层返回前已预创建空 status 文件，prelaunch 失败会把该文件写成 `error`。无论哪种路径，controller 都应读 `run_agent.sh` 的 stderr 判断具体原因并修正；不要当作"仍在运行"继续轮询
    - 轮询期间 controller 不应做其他裁决动作，避免读到不完整的输出
    - **禁止使用 `agent.log` / `peer.log` 推断运行状态**：不得通过 `wc -c`、`ls -la`、`tail` 等任何方式读取或探测 log 文件来判断 agent 是否仍在运行。唯一的状态判断来源是 `*-status.txt`。status 为空说明 agent 仍在运行，继续等待即可
 6. **只读取结构化文件**：
    - 允许读取：`agent-output.md`、`peer-output.md`（如有 peer）
    - **严禁以任何方式访问 `agent.log`、`peer.log`**——包括但不限于 `cat`、`head`、`tail`、`wc`、`ls -la`、`stat` 等读取内容或元数据的操作。除非用户明确授权（如调试失败时用户主动要求查看），读取前必须向用户确认
-7. **controller 逐条裁决 agent 发现**：agent 可能返回多条独立发现，controller 对每一条独立判断：
-   - 明显正确且局部可执行 → 直接应用
-   - 明显错误或脱离上下文 → 拒绝，记录原因
-   - 涉及产品、架构、安全、权衡判断 → 暂停，升级给用户
-8. **需要第二视角时拉起 peer**：controller 为同一 `<task-name>` 生成 `peer-task.md`，并通过 stdin 提供 peer 的补充指令。`generate_task.sh` 会自动在 peer 指令块首行注入同目录下的 `agent-output.md` canonical 路径，`run_agent.sh` / `prompt_protocol.sh` 会同时校验该行存在且该 `agent-output.md` 文件已经产出，并且 canonical 文件本身不是 symlink，确保 peer 始终建立在当前 task 的主 agent 输出之上。controller 用相同脚本、`role=peer` 启动 peer，结果自动写入 `peer-output.md` / `peer.log`，不会覆盖主 agent 产物。controller 读取两份发现后再裁决。
-   - `codex` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex <task-name> <peer-task.md路径> peer <workdir>`
-   - `claude` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude <task-name> <peer-task.md路径> peer <workdir>`
-   - `crush` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush <task-name> <peer-task.md路径> peer <workdir>`
-   - `opencode` peer：`<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto opencode <task-name> <peer-task.md路径> peer <workdir>`
+7. **controller 逐条裁决 agent 发现并写 `agent-judgment.md`**：**先写裁决，再修复，再判断是否下一轮**。这是协议强制门——`run_agent.sh` 在你启动新 agent 任务时会扫描 `.agent-loop/*/`，任何已 `done` 的 agent/peer 运行缺少对应 judgment 文件都会直接拒绝。
+   - 读完 `agent-output.md` 后，写 `$WORKDIR/.agent-loop/<task-name>/agent-judgment.md`，每条 finding 一行，格式：
+     ```
+     [<id>] agent:<Severity> → controller:<Severity>  reason: <一句话>
+     ```
+     `<id>` 可自拟（如 `F1`、`issue-1`），`<Severity>` ∈ `Critical | Major | Minor | Info`，理由用一句话说明为什么同意或降/升级
+   - 然后对每条按裁决结果处理：
+     - 真 Critical/Major 且明显正确 → 修复，准备下一轮
+     - 被降为 Minor/Info → 不修、记录即可
+     - 明显错误或脱离上下文 → 拒绝，在 reason 里说明
+     - 涉及产品、架构、安全、权衡 → 升级给用户
+   - **严重度膨胀对抗**：agent 后期轮次易把"理论可构造"标成 Critical。controller 的 reason 里**必须**直面两个问题：
+     - 这条 finding 在真实 LLM 自然合成路径里出现的概率大致是？
+     - 修复成本（代码复杂度增量、维护成本）值不值？
+   - **盲同意 = 失职**：如果你的 `controller:` 严重度和 `agent:` 完全一致，reason 必须写清楚独立验证了什么，而不是"同意 agent 评估"。
+8. **需要第二视角时拉起 peer**：controller 为同一 `<task-name>` 按同一合成契约写 `peer-task.md`——与 `agent-task.md` 的唯一差异是：**指令块的首行必须是** `主 agent 输出路径：<agent-output.md 的绝对路径>`，且该 `agent-output.md` 必须已经存在。`run_agent.sh` / `prompt_protocol.sh` 会校验该行存在、文件存在、canonical 文件本身不是 symlink，确保 peer 始终建立在当前 task 的主 agent 输出之上。
+   - 启动命令与步骤 4 相同，仅把末尾的 `agent` 换成 `peer`、prompt 路径换成 `.../<task-name>/peer-task.md`
+   - 结果写入 `peer-output.md` / `peer.log`，不会覆盖主 agent 产物
+   - peer 完成后，controller 必须读 `peer-output.md` 并写 `peer-judgment.md`，格式与 `agent-judgment.md` 相同但源头字段用 `peer:<Severity>`。peer 的发现同样经 controller 独立重评，才参与继续/终止条件判定。judgment gate 对 agent 和 peer 两类运行独立检查——任何一类缺 judgment 都会拒绝下一轮 agent 启动
 9. **有界循环**：每一轮在执行层面独立——agent 不感知上一轮的存在，也不读取上一轮的产物。但 controller 的**调度决策**依赖本轮裁决结果来判断是否继续。
    - **先裁决后终止**：即使某轮表面上已经满足终止条件，controller 也必须先逐条裁决本轮发现，并对“明显正确且局部可执行”的问题先完成修复，再根据修复后的裁决结果判断继续/暂停/终止。禁止在未完成本轮裁决与可直接修复项处理前直接终止。
    - **裁决时重新评估严重度**：agent 的严重度标注仅供参考，controller 必须对每条发现独立判断实际严重度。后期轮次 agent 倾向于严重度膨胀（将 Minor 级问题标为 Major 以维持"仍有重要发现"的表象），controller 不得盲信。
@@ -98,15 +95,113 @@ $WORKDIR/.agent-loop/
     peer-task.md     # controller 写入的 peer 任务指令，可选（需包含 agent-output.md 路径）
     agent-output.md  # 主 agent 的结构化发现（controller 读取后裁决）
     peer-output.md   # peer 对主 agent 发现的独立意见，可选（controller 读取后裁决）
+    agent-judgment.md # controller 对 agent findings 的独立重评，每条 finding 一行（见下文「controller 裁决与 judgment 文件」）
+    peer-judgment.md  # controller 对 peer findings 的独立重评，可选（仅当本轮跑过 peer）
     agent.log        # 主 agent 原始输出，严禁读取（需用户明确授权）
     peer.log         # peer 原始输出，严禁读取（需用户明确授权）
     agent-status.txt # 主 agent 运行状态：空(运行中) | done | error
     peer-status.txt  # peer 运行状态：空(运行中) | done | error
 ```
 
-## `agent-task.md` / `peer-task.md` 编写方式
+## `agent-task.md` / `peer-task.md` 合成契约
 
-controller 每轮写入任务文件时，必须使用 `scripts/generate_task.sh` 基于 `templates/agent-prompt.txt` 生成。调用方式：`<SKILL_DIR绝对路径>/scripts/generate_task.sh <type> <task-name> <role>`，指令正文固定从 stdin 读取，推荐用 HEREDOC 直接传入。脚本会根据 `task-name` 和 `role` 自动写入 canonical 路径：`$WORKDIR/.agent-loop/<task-name>/agent-task.md` 或 `peer-task.md`。其中 `peer-task.md` 会自动在指令块首行写入同目录的 `agent-output.md` 路径。模板中只有「类型」「角色」「指令」三部分允许变化，其余文本必须与模板逐字一致。`run_agent.sh` 会在启动前用同一套模板协议做严格校验；若 prompt 不是由模板规范生成、`type/role` 值不在模板定义的可选范围内、prompt-file 不位于当前 task 的 canonical 路径，或 canonical 文件是 symlink，会直接拒绝执行。
+生成 prompt 不是机械替换，而是 controller（LLM 智能）对 `templates/agent-prompt.txt` 与 task-module 的一次**智能合成**。目标：把 task-module 里的任务语义精准落入模板的可变槽位，并保证模板的固定部分与协议约束丝毫不动。合成后必须能通过 `scripts/validate_task.sh` 校验。
+
+### 可变槽位（controller 智能填写）
+
+| 槽位 | 对应模板行 | 填写规则 |
+|---|---|---|
+| 类型 | `- 类型：<...>` | 从模板占位定义的允许集合里选一个值（当前：`review \| discussion \| verification`） |
+| 角色 | `- 角色：<...>` | `agent` 或 `peer` |
+| 指令块 | `<在此描述具体任务>` | 由 task-module 蒸馏而来的任务指令。允许改写/合并/重排/删冗以保持简洁。**不得**在指令块里重新声明模板固定段（目标词：`硬性规则` / `观点级别定义` / `输出格式` / `严重度诚实原则`）——包括 ATX heading（任意 `#` 深度）、setext heading（`===` 或 `---` 下划线）、任意 markdown emphasis 变体（`*` / `_` 任意组合 + 可选空格）；判定会穿透 markdown 容器前缀：列表 `-` / `*` / `+`、带 `.` 或 `)` 的有序列表、checkbox `[x]` / `[ ]`、blockquote `>`、表格 `\| ... \|`（按单元拆开检测），以及这些的嵌套组合。**也不得**把 severity 四档齐全写进来——判定穿透同样的容器前缀，容忍反引号/方括号/强调包裹与半角/全角冒号。可以只引用其中一两档作为上下文解释，但四档齐全即拒。**代码块豁免**：fenced code block（` ``` ` / `~~~`，closer 需同字符类型且长度 ≥ opener；未闭合则整份拒）与 4 空格缩进的 indented code block 都被视为样例 prose，不触发上述检测。**例外**：4 空格缩进行若去掉缩进后以列表 / blockquote / checkbox / 有序列表 / 表格（`\|` 开头）标记起头，视为"列表/表格的缩进续行"而非 indented code block，仍走上述启发式检测（防止用缩进伪装绕过） |
+| 严重度定义块 | `<严重度定义块>` | 四行 `` - `[Level]`：<含义> ``，按 **Critical → Major → Minor → Info** 顺序，每行 body 非空（validator 只校验这一层结构）。含义文本**应**给出可观察的分级维度（如"LLM 自然合成里每百条出现 N 次"、"阻断合法用户 vs 仅误伤低频 case"、"需要刻意构造 vs 常见自然写法"），**避免**只用"显著/明显/轻微/少量"这种主观形容词——主观形容词会让审查 agent 把所有理论可达问题都标 Critical，触发严重度膨胀。此条由 controller 合成时自律遵守，validator 不做语义检查。若 task-module 已有 severity 语义（如 `## 严重度`、`## 严重度标注`），抽出后按这个要求再校准一次；若 task-module 无语义，用下文「默认级别定义」作为 fallback |
+
+### 固定槽位（逐字保留，不得改动）
+
+- `# 硬性规则` 段的 1–8 条全部
+- `**严重度诚实原则**` 段
+- `# 输出格式` 段（章节标题、例行项、例子占位全部保留）
+- 所有章节标题、空行、非占位的注释文本
+
+> 任何对固定槽位的改写——**包括**改标题、改编号、新增或删除一条硬性规则、修改输出格式的占位示例——都会被 validator 逐字拒绝。此外，validator 也会拒绝指令块里**重新声明**这些固定段（详见可变槽位表对"指令块"的约束）。
+
+### peer 专属约束
+
+- 指令块的**首行**必须是：`主 agent 输出路径：<agent-output.md 绝对路径>`（路径必须是同 task 目录下的 `agent-output.md`）
+- 该 `agent-output.md` 文件必须已经存在、不是 symlink
+- 首行下方可以空一行再写 peer 的补充指令
+
+### 合成纪律
+
+- **蒸馏而非搬运**：task-module 里可能有任务描述、输入输出、审查项、审查原则、原则示例等。把真正对 agent 行动有约束力的内容提炼到指令块；不要把整个文档首尾复制
+- **消除冗余**：如果 task-module 里有 `## 严重度 / ## 严重度标注 / ## 级别定义` 这类小节，内容**应**被提升到 `<严重度定义块>` 槽位，而不是同时出现在指令块和观点级别定义两处
+- **保留意图**：在不破坏原作者意图的前提下可改写措辞；若某条规则的文本本身已有授权意义（例如引用了外部文档路径），照抄，不要自行重述
+- **不要假装更聪明**：task-module 没覆盖到的部分，不要凭空补充规则；不确定就放到"无法判断的点"交给下一轮/用户裁决
+
+### 自检流程
+
+1. 写入 `$WORKDIR/.agent-loop/<task-name>/agent-task.md`（或 `peer-task.md`）
+2. `<SKILL_DIR绝对路径>/scripts/validate_task.sh <task-name> <role> [workdir]`（`workdir` 省略时默认 `$PWD`；cwd 不在目标 workdir 时必须显式传）
+3. 若 validator 报错：读错误信息 → 修正同一文件 → 重新 validate（不换 task-name；此时仍未产生 agent 运行产物）
+4. 通过后才能进入步骤 4（启动 run_agent.sh）
+
+### 观点级别类型的不变性
+
+`Critical / Major / Minor / Info` 四档**作为类型**是协议不变量；合成过程不得增删档位，也不得改名。每一档的**具体含义**可以按任务特化（这就是智能合成的价值）——例如 scenario 审查的 Critical 是"场景越界让后续测试建立在错误边界上"，code review 的 Critical 是"功能错误/安全漏洞"。
+
+默认级别定义如下(这组默认义项适用于大部分通用 code review / 文档审查任务):
+- `[Critical]`：功能错误、安全漏洞、数据损坏风险；必须修复并在下一轮验证
+- `[Major]`：显著质量问题（性能、可维护性、API 误用）；必须修复并在下一轮验证
+- `[Minor]`：风格、文档、可读性问题；可选修复
+- `[Info]`：纯观察或背景说明，无需动作
+
+task-module 有自己的 severity 语义时，优先使用 task-module 的（比如 scenario-review.md、plan-review.md 等的 `## 严重度` 小节）；task-module 无 severity 语义时，结合默认级别定义生成合理的级别定义（实在无法确定时，建议直接使用默认级别定义）。
+
+## controller 裁决与 judgment 文件
+
+控制严重度膨胀的核心机制：每次 agent 或 peer 完成后，controller **必须**写同目录下对应的 judgment 文件，对每条 finding 独立再评估，再决定修/不修/下一轮。
+
+- agent 完成 → `agent-judgment.md`（源头字段为 `agent:<Severity>`）
+- peer 完成 → `peer-judgment.md`（源头字段为 `peer:<Severity>`）
+
+两份文件互不覆盖；只跑了 agent 时 `peer-judgment.md` 不存在也无所谓，跑了哪个就写哪个对应的 judgment。
+
+### 文件位置与格式
+
+`$WORKDIR/.agent-loop/<task-name>/{agent,peer}-judgment.md`，纯文本，每条 finding 一行：
+
+```
+[<id>] <agent|peer>:<Severity> → controller:<Severity>  reason: <一句话独立判断依据>
+```
+
+- `<id>`：自拟（`F1`、`bypass-ghm` 之类），与对应 output 文件中的 finding 对应即可
+- 源头字段：agent-judgment.md 的每行用 `agent:<S>`，peer-judgment.md 的每行用 `peer:<S>`
+- `<Severity>`：`Critical | Major | Minor | Info` 其中之一
+- `reason`：不允许只写"同意 agent/peer"；必须说明独立验证了什么、或为何降/升级、或为何此路径不算"自然合成"
+
+一个示例（agent-judgment.md）：
+
+```
+[F1] agent:Critical → controller:Major  reason: CRLF 行尾在 Windows 编辑器常见，阻断合法用户；改一行 mapfile 后置处理即可
+[F2] agent:Critical → controller:Minor  reason: 需要 30+ 字符中文注释才能触发，合成纪律要求蒸馏、不会自然写出这么长
+[F3] agent:Critical → controller:Minor  reason: emoji 前缀伪装重述，合成契约已禁止指令块装饰化；修复成本高于收益
+```
+
+### run_agent.sh 的强制门
+
+当你调用 `run_agent.sh` 启动**新 agent 任务**时，脚本会扫描 `$WORKDIR/.agent-loop/*/`，对每个已 `done` 但缺少对应 judgment 文件的历史运行 → **拒绝启动**，列出缺失路径。判定规则：
+- `agent-status.txt == "done"` 且有 `agent-output.md` → 必须有 `agent-judgment.md`
+- `peer-status.txt == "done"` 且有 `peer-output.md` → 必须有 `peer-judgment.md`
+
+agent 和 peer 两类独立检查，任一缺失都会拒绝下一轮 agent 启动。这是物理层拦截 autopilot。
+
+使用 `--skip-judgment-check` 可绕过（仅用于历史目录清理、自动化测试等）。日常流程不应使用。
+
+### 与继续/终止条件的关系
+
+步骤 9 的"继续条件"**在 controller 重评后生效**：本轮所有 judgment 文件（agent 的，以及 peer 跑过时 peer 的）里没有 `controller:` 标为 Major 及以上的 finding → 无论 agent/peer 标了多少 Critical，本轮都视为无真 Major → 可以终止。
+
+**用户 override 3 轮上限时的额外纪律**：用户说"继续跑到无 Major+"时，controller 仍然按 judgment 文件里**自己重评**的严重度判断，而不是按 agent/peer 标注。若连续 2 轮新发现的真 Major 全部属于"需要更复杂输入才能触发"（路径越来越曲折、复杂度增量远大于实际收益），视为膨胀信号，主动终止并报告给用户。
 
 ## `agent-output.md` 推荐格式
 
@@ -127,47 +222,29 @@ controller 每轮写入任务文件时，必须使用 `scripts/generate_task.sh`
 - 需要产品知识、架构背景或更多上下文才能确定的点；若无则写"无"
 ```
 
-级别说明：
+# 质量门槛（controller 约束）
 
-- `[Critical]`：功能错误、安全漏洞、数据损坏风险；必须修复并在下一轮验证
-- `[Major]`：显著质量问题（性能、可维护性、API 误用）；必须修复并在下一轮验证
-- `[Minor]`：风格、文档、可读性问题；可选修复
-- `[Info]`：纯观察或背景说明，无需动作
-
-# 质量门槛
-
-- 必须区分 `controller` 与 `agent`，controller 不执行任务，只裁决
-- 必须使用唯一 task-name，禁止多任务或多轮次共用同一工作目录
-- controller 只通过文件读取 agent 输出，不内联读取任何子进程的 stdout/stderr；runner 负责把 agent 输出落盘（codex 用 `-o`，claude/crush/opencode 用 stdout 重定向），所有机制均符合此约束
-- 必须限制循环轮数，禁止无界自反馈
-- 升级条件必须明确：架构取舍、权限边界、安全风险
-- 不得宣称"agent 原生互调"；准确表述为"controller 通过 CLI 子进程启动 agent"
-- controller 裁决时必须独立判断严重度，不得直接采信 agent 标注。已知退化模式：后期轮次 agent 将 Minor 膨胀为 Major、将"修复未传播"包装为新发现
-- controller 必须先完成本轮裁决与可直接修复项处理，再判断是否终止；不得因为“表面满足终止条件”而提前停在未裁决状态
-- 结构化输出文件必须与原始日志文件分离
-- controller 必须用 `scripts/generate_task.sh` 通过 stdin 生成当前 task 的 `agent-task.md` / `peer-task.md`，不得手写自由格式 prompt
-- peer 任务必须建立在当前 task 的 `agent-output.md` 之上；该 canonical 路径由 generator 自动注入，validator 会同时校验路径文本、文件存在性和“不是 symlink”
-- `run_agent.sh` 会拒绝复用已存在同角色产物的 task-name；controller 看到该错误时，应新建下一轮目录而不是重试覆盖
-- `run_agent.sh` 会按 `templates/agent-prompt.txt` 做严格协议校验：除类型、角色、指令块外，其余文本必须与模板逐字一致；类型、角色的可选值也必须来自模板中的占位定义，避免 generator 和 validator 各自维护一份枚举
-- `run_agent.sh` 只接受当前 `<task-name>/<role>` 的 canonical prompt 路径：`agent-task.md` 或 `peer-task.md`；不会执行 task 目录外、其他轮次遗留、通过 symlink 伪装成 canonical 名称的 prompt 文件，或位于 symlink 父目录链下的伪 canonical 文件
-- `run_agent.sh` 现在会在异常退出（包括被 `TERM/HUP/INT` 打断）时将 `*-status.txt` 写为 `error`，避免遗留空状态文件误判为"仍在运行"
-- `--detach=tmux` 会在外层命令返回前预创建空的 `*-status.txt`；因此在该模式下，controller 可以立即开始轮询，而不必容忍“文件暂时不存在”的过渡窗口
-- `agent-status.txt` / `peer-status.txt` 有两个用途：①轮询判断 agent 是否完成（步骤 5）；②判断本次 `run_agent.sh` 调用是否成功。**不用于决定是否发起下一轮**——是否继续循环由 controller 根据裁决结果判断。注意：若 `run_agent.sh` 在参数校验阶段（参数不足、workdir 不存在、task-name 非法、role 非法、prompt 文件不存在）就退出，status 文件不会被创建——controller 应确保调用参数正确，这些是 controller 编程错误而非运行时失败
-- `run_agent.sh` 首次运行时自动将 `.agent-loop/` 加入 `.git/info/exclude`，避免协议文件污染 agent 的仓库视图
+- 必须区分 `controller` 与 `agent`——controller 不执行任务，只指挥和裁决；不得宣称"agent 原生互调"，准确表述为"controller 通过 CLI 子进程启动 agent"
+- 每一轮使用唯一 task-name，禁止多任务或多轮次共用同一工作目录
+- 必须限制循环轮数，禁止无界自反馈；升级条件必须明确：架构取舍、权限边界、安全风险
+- controller 只通过文件读取 **agent 子进程**的结构化输出，不内联读取 agent/peer 的 stdout/stderr；`run_agent.sh` 壳脚本自身的 stderr 可以读，用于排查 prelaunch 阶段被拒原因（参数、协议、复用拦截）
+- controller 裁决时必须独立判断严重度，不得直接采信 agent 标注——已知退化模式：后期轮次 agent 将 Minor 膨胀为 Major、将"修复未传播"包装为新发现
+- controller 必须先完成本轮裁决与可直接修复项处理，再判断是否终止；不得因"表面满足终止条件"而提前停在未裁决状态
+- controller 每轮合成 `agent-task.md` / `peer-task.md` 后必须先通过 `scripts/validate_task.sh` 自检；自检通过后才能调用 `run_agent.sh`。不得绕过 validator 直接启动 runner
+- controller 每次 agent/peer 完成后必须写对应的 judgment 文件再进入修复/下一轮（格式、gate 机制、反盲同意要求详见步骤 7 / 步骤 8 与「controller 裁决与 judgment 文件」章节）
+- task-module 的「观点级别定义」应包含可观察的分级维度（如"LLM 自然合成出现频率"、"是否阻断下游"），避免只用"显著/明显/轻微/少量"这种主观形容词——主观定义会直接诱发审查 agent 的严重度膨胀。此条是 controller 合成时的自律约束，validator 不做语义检查
+- peer 任务必须建立在当前 task 的 `agent-output.md` 之上：指令块首行须写成 `主 agent 输出路径：<绝对路径>`，该文件必须存在且不是 symlink
 
 # 验证方式
 
 最小验证：
 
-1. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex test-codex .agent-loop/test-codex/agent-task.md agent <repo>`，确认产生 `agent-output.md`、`agent.log`、`agent-status.txt`
-2. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto codex test-codex .agent-loop/test-codex/peer-task.md peer <repo>`，确认产生 `peer-output.md`、`peer.log`，且 `agent-output.md` 未被覆盖
-3. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto claude test-claude .agent-loop/test-claude/agent-task.md agent <repo>`，确认行为一致
-4. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto crush test-crush .agent-loop/test-crush/agent-task.md agent <repo>`，确认行为一致
-5. 执行 `<SKILL_DIR绝对路径>/scripts/run_agent.sh --detach=auto opencode test-opencode .agent-loop/test-opencode/agent-task.md agent <repo>`，确认行为一致
-6. 对 claude/crush/opencode 分别以各自的 task-name 执行 peer 角色（如 `test-claude` + `role=peer`），确认 `peer-output.md` / `peer.log` 正确生成且不覆盖对应 agent 产物
-7. 确认多个 task-name 并行不冲突
-8. 确认首次运行后 `.agent-loop/` 已被写入 `<repo>/.git/info/exclude`
-9. 用 `scripts/generate_task.sh` 为某个 task 生成标准 prompt，确认文件落在 `.agent-loop/<task-name>/` 下且 `run_agent.sh` 接受；其中 peer prompt 需自动包含同目录 `agent-output.md` 路径。再手动改坏任一固定章节文本、移除 peer 的 canonical `agent-output.md` 行、将类型改成模板外值、改用 task 目录外的 prompt-file，或将 canonical prompt / `agent-output.md` / task 目录父链替换为 symlink，确认 `run_agent.sh` 直接拒绝
+1. **runner × role 矩阵**：对当前环境**已安装的每个** runner（`{codex, claude, crush, opencode}` 的非空子集，至少一个）使用各自独立的 task-name；在每个 task-name 内先跑 `agent` 再跑 `peer`（peer 必须指向同 task 的 `agent-output.md`），确认产生 `agent-output.md` / `agent.log` / `agent-status.txt`，peer 后续产出 `peer-output.md` / `peer.log` 且不覆盖主 agent 产物。未安装的 runner 跳过即可，不是验证失败
+2. **并行隔离**：多个 task-name 并行不冲突
+3. **git exclude**：首次运行后 `.agent-loop/` 已被写入 `<repo>/.git/info/exclude`
+4. **validator — agent**：按合成契约手写一份 `agent-task.md`，`scripts/validate_task.sh <task-name> agent` 通过；再分别制造缺陷（改坏固定章节文本、类型越界、severity 缺级 / 乱序 / body 为空、canonical prompt 换 symlink），确认 validator 给出明确错误并拒绝
+5. **validator — peer**：先让 agent 跑一轮产出 `agent-output.md`，再手动合成 `peer-task.md`（首行须为 `主 agent 输出路径：<绝对路径>`），`validate_task.sh <task-name> peer` 通过；移除首行 / 换 symlink / 删除 `agent-output.md`，分别确认被拒绝
+6. **judgment gate**：让 agent 跑完一轮产出 `agent-output.md` + `agent-status.txt == done`，**不写** `agent-judgment.md`，尝试用新 task-name 启动 agent 角色应被 `run_agent.sh` 拒绝（错误信息列出缺失的 `agent-judgment.md` 路径）；写入后重试应通过。再在某一 task 下跑 peer 产出 `peer-output.md` + `peer-status.txt == done`，同样验证缺 `peer-judgment.md` 会拒绝下一轮 agent 启动，补上后通过。`--skip-judgment-check` 能绕过（仅用于历史清理/测试）
 
 # 已知平台问题
 
@@ -187,10 +264,10 @@ controller 每轮写入任务文件时，必须使用 `scripts/generate_task.sh`
 
 # 引用资料
 
-- `$SKILL_DIR/scripts/run_agent.sh` — runner 包装脚本，controller 通过它启动 agent（推荐用 `--detach=auto` 让脚本自行决定是否脱离）
-- `$SKILL_DIR/scripts/generate_task.sh` — controller 生成标准 `agent-task.md` / `peer-task.md` 的入口；传入 `<type> <task-name> <role>` 后自动写入对应 task 目录，正文固定通过 stdin / HEREDOC 传入
-- `$SKILL_DIR/scripts/prompt_protocol.sh` — generator 与 runner 共享的模板协议解析与校验逻辑；负责 peer 的 canonical `agent-output.md` 注入与校验
-- `$SKILL_DIR/templates/agent-prompt.txt` — controller 每轮写入 `agent-task.md` / `peer-task.md` 时参考的模板，填入具体任务描述后发给 agent 或 peer
+- `$SKILL_DIR/scripts/run_agent.sh` — runner 包装脚本，controller 通过它启动 agent（推荐用 `--detach=auto` 让脚本自行决定是否脱离）。启动前会调用 validator 二次校验 prompt 文件
+- `$SKILL_DIR/scripts/validate_task.sh` — controller 合成 `agent-task.md` / `peer-task.md` 后的自检入口；传入 `<task-name> <role> [workdir]`，失败时给出精确错误信息，controller 据此修正再次校验
+- `$SKILL_DIR/scripts/prompt_protocol.sh` — validator 与 runner 共享的模板协议解析与校验逻辑；负责模板加载、固定槽位逐字比对、severity 四行校验、peer 的 canonical `agent-output.md` 校验
+- `$SKILL_DIR/templates/agent-prompt.txt` — controller 合成 `agent-task.md` / `peer-task.md` 时的模板源文件，包含所有固定槽位与占位
 - 本机 CLI 自检：`codex exec --help`
 - 本机 CLI 自检：`claude --help`
 - 本机 CLI 自检：`crush run --help`
