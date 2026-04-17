@@ -13,22 +13,27 @@
 [S-1][CRITICAL][INTEGRATION] 财务运营点击导出指定月份发票
 → 系统生成并返回对应月份的 CSV 文件
 ↑ spec-ref: Acceptance Signals, Rules
+↑ upstream-ref: process/invoice-export.md#Process.InvoiceExport
 
 [S-2][CRITICAL][CONTRACT] 非授权角色尝试调用导出接口
 → 系统拒绝请求且不返回文件
 ↑ spec-ref: Acceptance Signals, Interfaces
+↑ upstream-ref: domain/invoice-export.md#Rel.InvoiceExport-User
 
 [S-3][PROPERTY] 导出结果只包含当前筛选月份的数据
 → 任意月份输入下都不会混入其他月份记录
 ↑ spec-ref: Rules
+↑ upstream-ref: domain/invoice-export.md#Invariant.InvoiceExport.1
 
 [S-4][INTEGRATION] 文件生成失败时用户重试导出
 → 系统允许从 failed 再次进入 generating
 ↑ spec-ref: State Transitions
+↑ upstream-ref: state-machine/invoice-export.md#StateMachine.InvoiceExport
 
 [S-5][INTEGRATION] 导出大月份数据时生成文件
 → 系统仍在 30 秒内完成文件生成
 ↑ spec-ref: Non-Functional Constraints
+↑ upstream-ref: N/A + 当前约束仅来自 TechnicalSpec 的非功能目标，尚无对应建模锚点
 
 ## Coverage Notes
 - 已覆盖主流程成功路径
@@ -57,6 +62,7 @@
 [S-1][CRITICAL][INTEGRATION] 审批完成后发送通知
 → 系统向定义好的接收对象发送一次通知
 ↑ spec-ref: Acceptance Signals, Rules
+↑ upstream-ref: N/A + 阻塞问题尚未澄清接收对象与通知渠道，当前无法稳定映射到建模锚点
 
 ## Coverage Notes
 - 当前仍无法确定“接收对象”与“通知渠道”，测试输入输出边界不稳定
