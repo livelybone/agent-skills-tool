@@ -10,3 +10,4 @@ pnpm-debug.log*
 .agent-loop
 .code-review/
 .claude
+__pycache__/
