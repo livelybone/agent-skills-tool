@@ -1,23 +1,36 @@
 # 复杂度分级标准
 
-复杂度不会改变 `spec-driven-dev` 的主阶段顺序；它只影响**标准模式**下的审查深度、人工 gate 粒度，以及何时值得追加独立第二视角。
+复杂度不会改变 `spec-driven-dev` 的 13 步主阶段顺序；它只决定**标准模式下各 Review 阶段是否执行**，以及人工 gate 粒度。
+
+Auto 模式下所有 Review 阶段默认强制执行，不受复杂度影响（详见 `workflows/auto.md`）。
 
 ## 不随复杂度变化的内容
 
 - `modeling-first` 仍是硬前置，除非建模豁免已被批准
+- 建模豁免审查（`prompts/exemption-review.md`）只要走豁免就强制执行，不受复杂度影响
 - Epic 仍必须先产出并校验 `plan.md`
+- Epic 的 Plan Review 在任何模式和任何复杂度下都**强制执行**
 - `tech-spec-writing`、`test-design-and-implementation`、`feature-implementation-from-spec` 的主阶段顺序不变
 - worker 自己定义的硬 gate、红测约束、baseline、验证命令不因复杂度跳过
+- 机械校验脚本（`check-plan-structure.sh`、`check-upstream-coverage.sh`）始终执行
 
-## 标准模式下的深度建议
+## 标准模式下 Review 阶段的触发规则
 
-| 环节 | Trivial | Simple | Medium | Complex |
+| Review 阶段 | Trivial | Simple | Medium | Complex |
 |------|---------|--------|--------|---------|
-| 建模审查 | 人工快速确认 | 人工审查 | 人工审查，必要时加独立第二视角 | 深度审查，通常值得独立第二视角 |
-| Plan Review（Epic） | N/A | N/A | 人工确认边界与依赖 | 人工深度确认，必要时多轮 |
-| Tech Spec 审查 | 快速确认主路径 | 人工审查 | 人工审查，独立第二视角通常值得做 | 深度审查，独立第二视角强烈建议 |
-| Test 场景 / 测试审查 | 可只做人审 | 人审为主，独立审查可选 | 独立审查通常值得做 | 独立审查强烈建议 |
-| 实现后额外质量检查 | 正常验证 | 正常验证 | 根据风险追加更深检查 | 高风险模块应做更严格复核 |
+| 步骤 4 Modeling Review | 可跳过（人工快速确认） | 人工审查为主，独立审查可选 | 建议执行 | 强烈建议执行 |
+| 步骤 4' Modeling Exemption Review | 强制执行 | 强制执行 | 强制执行 | 强制执行 |
+| 步骤 6 Plan Review（Epic） | N/A | N/A | 强制执行 | 强制执行（建议多轮） |
+| 步骤 8 Spec Review | 可跳过（人工快速确认） | 人工审查为主，独立审查可选 | 建议执行 | 强烈建议执行 |
+| 步骤 10 Test Review | 可跳过（人工快速确认） | 人工审查为主，独立审查可选 | 建议执行 | 强烈建议执行 |
+| 步骤 12 Implementation Review | 可跳过（正常验证即可） | 人工审查为主，独立审查可选 | 建议执行 | 强烈建议执行（高风险模块尤其） |
+
+**跳过的条件与留痕**：
+
+- "可跳过" 意味着允许跳过 `multi-agent-loop` 独立审查，但人工确认仍然必须完成
+- 所有跳过必须在 Decision Log 中写明：`跳过理由：<complexity 判定> + <具体理由>`
+- 跳过 ≠ 忽略：跳过仅指不启动独立 runner；各阶段的机械校验（如 Red Run、check-upstream-coverage.sh）仍要执行
+- 若跳过后下游阶段暴露出本应在 Review 阶段发现的问题，须在复盘时调整该模块的复杂度评级
 
 ## 各级别示例
 
@@ -31,4 +44,5 @@
 Epic 不是单一复杂度档位，而是需要先建模、再 plan、再按模块推进的多模块需求。
 
 - Epic 内每个模块都可以再单独标记 `Trivial / Simple / Medium / Complex`
-- `plan.md` 中的复杂度字段服务于模块级审查和推进优先级，不替代 Epic 本身的编排要求
+- `plan.md` 中的复杂度字段服务于模块级 Review 触发判断和推进优先级
+- 模块复杂度不影响 Epic 维度的 Modeling Review 和 Plan Review（Epic 维度审查的触发规则看整个 Epic 的规模，不看单模块）

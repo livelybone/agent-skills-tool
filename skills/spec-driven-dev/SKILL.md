@@ -69,31 +69,47 @@ metadata:
 - 跨多个模块、有显式依赖或需要模块边界/契约 → **Epic**，必须先走 plan
 - 单模块可承载 → 不产出 plan，直接走后续 worker stages
 
+## 13 步阶段序列
+
+`spec-driven-dev` 的主阶段序列在 Standard / Auto / Epic 三种模式下共享骨架，每个内容阶段后面紧跟一个对应的 Review 阶段：
+
+```
+1.  Intake And Route
+2.  Clarify If Needed
+3.  Modeling
+4.  Modeling Review               ← prompts/upstream-review.md
+    (或 Modeling Exemption Review  ← prompts/exemption-review.md)
+5.  Plan If Epic
+6.  Plan Review (Epic only)       ← prompts/plan-review.md
+7.  Tech Spec
+8.  Spec Review                   ← prompts/spec-review.md
+9.  Test Design And Implementation
+10. Test Review                   ← prompts/test-review.md
+11. Feature Implementation
+12. Implementation Review         ← prompts/impl-review.md
+13. Workflow Verification And Summary
+```
+
+Review 阶段的执行机制统一走 `multi-agent-loop`（agent 角色，task-name `<stage>-<module>-r1..r3`，默认 runner 优先级 `opencode > claude > codex > crush`）。
+
 ## 标准模式
 
-标准模式下，`spec-driven-dev` 仍负责编排全流程，但在关键 stage gate 等待人工确认。详细步骤见 `workflows/standard.md`。
+标准模式下，`spec-driven-dev` 仍负责编排全流程，在关键 stage gate 等待人工确认。Review 阶段**是否执行**按 `guides/complexity.md` 的复杂度判断（Trivial/Simple 可跳过，Medium/Complex 建议或强制执行；Modeling Exemption Review 和 Plan Review 任何情况下都强制）。
 
-标准模式的主路径：
-
-1. intake and route
-2. clarify if needed
-3. modeling
-4. plan if epic
-5. tech spec
-6. test design and implementation
-7. feature implementation
-8. workflow verification and summary
+详细步骤见 `workflows/standard.md`。
 
 ## Auto 模式
 
-Auto 模式下，`spec-driven-dev` 仍走完整阶段序列，但不会在普通 gate 处停下等待用户。详细规则见 `workflows/auto.md`。
+Auto 模式下，`spec-driven-dev` 走完整 13 步序列，**每个 Review 阶段都强制执行**，不在普通 gate 处停下等待用户。只有触发升级边界时才暂停。
+
+详细规则见 `workflows/auto.md`。
 
 Auto 模式的关键语义：
 
 - 自动推进是**流程自动推进**，不是 orchestrator 自己吞掉 worker 边界
-- 每个阶段的正式产物仍由对应 worker skill 生成
+- 每个内容阶段的正式产物仍由对应 worker skill 生成
+- 每个 Review 阶段由 `multi-agent-loop` 发起独立 runner 执行，controller 逐条裁决
 - orchestrator 维护 Decision Log / workflow summary 等编排级产物
-- 需要独立第二视角时，通过 `multi-agent-loop` 发起阶段审查
 
 ## Epic 处理
 
@@ -107,41 +123,57 @@ Epic 的核心是：
 
 ## Stage Gate
 
-### Gate 1: 进入建模前
+13 步序列中每个内容阶段→内容阶段的转换都有一个 gate，gate 的基本要求是：**上一内容阶段正式产物已产出 + 对应 Review 阶段已收敛（或按当前模式下的跳过规则合法跳过）**。Review 跳过规则见 `guides/complexity.md` 与 `workflows/standard.md`。
+
+### Gate 1: 进入建模（步骤 3）前
 
 - 已有原始需求或 `ClarifiedRequirement`
 - 清晰度足够，或 blocker 已显式暴露
 
-### Gate 2: 进入 tech spec 前
+### Gate 2: 进入 Tech Spec（步骤 7）前
 
-- `docs/models/<scenario>/<name>.md` 已就绪
-- Epic 场景的 `plan` 已通过 `scripts/check-plan-structure.sh` + `scripts/check-upstream-coverage.sh` 两项机械校验
+- 步骤 3 产物就绪：`docs/models/<scenario>/<name>.md` 或已批准的 `modeling_exemption`
+- 若走正常建模：步骤 4 Modeling Review 已收敛（auto 强制；standard 按 `guides/complexity.md` 判断，允许合法跳过）
+- 若走建模豁免：步骤 4' Modeling Exemption Review 已收敛（任意模式任意复杂度均强制，不可跳过）
+- Epic 场景：`plan.md` 已通过 `scripts/check-plan-structure.sh` + `scripts/check-upstream-coverage.sh`，且步骤 6 Plan Review 已收敛（任意模式均强制）
 
-### Gate 3: 进入 test 阶段前
+### Gate 3: 进入 Test Design（步骤 9）前
 
-- `tech-spec-writing` 已产出可消费的 `TechnicalSpec`
+- 步骤 7 产物就绪：`TechnicalSpec.Status = Ready for test/design`
+- 步骤 8 Spec Review 已收敛或合法跳过
 - 不存在会改变测试边界的 unresolved blockers
 
-### Gate 4: 进入 implementation 前
+### Gate 4: 进入 Feature Implementation（步骤 11）前
 
-- `test-design-and-implementation` 已产出可执行测试
+- 步骤 9 产物就绪：Test Scenarios `Status = Ready for implementation` + Executable Tests + Red Run 结果
+- 步骤 10 Test Review 已收敛或合法跳过
 - spec / tests / models 之间没有未解决语义冲突
 
-### Gate 5: workflow 完成前
+### Gate 5: 进入 Workflow Verification（步骤 13）前
 
-- `feature-implementation-from-spec` 已产出 `DeliveredChange`
-- Upstream Coverage Matrix 已产出并通过 `scripts/check-upstream-coverage.sh`（结构与必测条目见 `guides/upstream-coverage.md`）
+- 步骤 11 产物就绪：`DeliveredChange.Status = Delivered`
+- 步骤 12 Implementation Review 已收敛或合法跳过
 - 当前 run 的关键验证结果已汇总
+
+### Gate 6: Workflow 完成前（步骤 13 的出口）
+
+- Upstream Coverage Matrix 已产出并通过 `scripts/check-upstream-coverage.sh`（结构与必测条目见 `guides/upstream-coverage.md`）
 - `WorkflowCheckpoint` 已更新到最终状态
+- workflow summary 已输出给用户
 
 ## Review Principles
 
-本文档中的“独立审查”均指：通过 `multi-agent-loop` 启动独立进程执行阶段审查。
+本文档中的"独立审查"均指：通过 `multi-agent-loop` 启动独立进程执行阶段审查。
 
-- Epic plan review 是最常见的独立审查点
-- 其他阶段是否需要独立审查，跟随 worker skill 的规则或当前风险判断
-- 审查 agent 只输出发现，controller 逐条裁决
-- `multi-agent-loop` 的 bounded loop 规则完全沿用其自身 SKILL 定义
+- Review 阶段是 13 步序列中与内容阶段同级的编号步骤（步骤 4 / 6 / 8 / 10 / 12），不是 side note
+- 每个 Review 阶段都有对应的 prompt 文件（`prompts/*-review.md`）
+- Auto 模式：全部 Review 阶段强制执行
+- Standard 模式：Review 阶段按 `guides/complexity.md` 触发（Modeling Exemption Review 和 Plan Review 例外，始终强制）
+- 审查角色固定为 `agent`（peer 只在需要第二视角挑战已有审查时才用）
+- 审查 agent 只输出发现，controller 逐条裁决并写 `agent-judgment.md`
+- `multi-agent-loop` 的 bounded loop 规则（最大 3 轮、继续/终止/升级判定）完全沿用其自身 SKILL 定义
+- 默认 runner 优先级：`opencode > claude > codex > crush`
+- **Review 收敛后的上下文压缩**：每个 Review 收敛后，orchestrator 先把 `Context Summary Delta` 合并进 `Context Summary` 并清空 Delta，再调用宿主 harness 的压缩指令（`/compact` 或等价）清空工作上下文。Auto 模式强制，Standard 模式强烈建议。Epic 场景的 Plan Review 结束和模块切换都落在通用规则覆盖范围内，不做额外压缩；但并行模块必须串行推进（方案 A）或独立 orchestrator session（方案 B），禁止同 session 真并行 + 会话级压缩。详细规则见 `workflows/auto.md` 的「Review 收敛后的上下文压缩」节
 
 ## Checkpoint And Handoff
 
@@ -162,7 +194,10 @@ Epic 的核心是：
 - 最少包含：当前阶段、上一步完成状态、context summary、已知 blockers
 - **Producer**：orchestrator 在每个 stage 完成后立即更新
 - **Consumer**：下一次会话启动时由 orchestrator 读取，定位续接点
-- **持久化**：Epic 场景落到 `plan.md` 的 Progress 表及相邻同目录位置；单模块场景允许仅在会话内维护，但用户明确要求续接时必须落盘
+- **持久化**：
+  - Epic 场景：落到 `plan.md` 的 Progress 表及相邻同目录位置（Epic 多 session 并行时按 `workflows/epic.md` 的命名约定，每模块一个文件）
+  - 单模块场景：若触发压缩（Auto 模式强制；Standard 模式强烈建议但允许暂缓）**必须**落盘——`/compact` 会清空会话内状态，会话内 checkpoint 会和压缩前工作上下文一起被清掉，恢复基线将不存在
+  - 单模块 + Standard + 完全不触发压缩：允许仅在会话内维护，但用户明确要求续接时仍必须落盘
 
 ## Definition Of Done
 
@@ -188,10 +223,16 @@ Epic 的核心是：
 
 ### 本 skill 自身
 
-- `guides/complexity.md` — 标准模式下的复杂度分级与审查深度建议
-- `workflows/standard.md` — 标准模式的编排步骤
-- `workflows/auto.md` — Auto 模式的编排规则
-- `workflows/epic.md` — Epic 的建模 + plan + 模块路由规则
+- `guides/complexity.md` — 标准模式下的复杂度分级与 Review 阶段触发规则
+- `workflows/standard.md` — 标准模式的 13 步编排步骤
+- `workflows/auto.md` — Auto 模式的编排规则（Review 强制执行）
+- `workflows/epic.md` — Epic 的建模 + plan + 按模块路由 + 每模块 Review 规则
+- `prompts/upstream-review.md` — Modeling Review 提示（步骤 4）
+- `prompts/exemption-review.md` — Modeling Exemption Review 提示（步骤 4'）
+- `prompts/plan-review.md` — Plan Review 提示（步骤 6，Epic 强制）
+- `prompts/spec-review.md` — Spec Review 提示（步骤 8）
+- `prompts/test-review.md` — Test Review 提示（步骤 10，编排级）
+- `prompts/impl-review.md` — Implementation Review 提示（步骤 12）
 - `templates/plan.md` — Epic plan 模板
 - `templates/stage-handoff.md` — orchestration-specific stage handoff 模板
 - `templates/workflow-checkpoint.md` — orchestration-specific workflow checkpoint 模板
