@@ -76,7 +76,7 @@ metadata:
 7. **交棒下游**
    - 向评审或 CI 交付 `DeliveredChange`
    - review 与 CI 的消费入口为 `DeliveredChange` 的 `Spec Completeness Matrix` / `Upstream Coverage Matrix` / `Validation` / `Blockers` 四节；这些节缺失或与实现/测试不对齐时，下游应当拒收并回退
-   - 触发独立审查（跨 agent review）的最小条件：① `Upstream Models` 非 `N/A` 且包含不变量 / 派生关系 / 跨模块关系；② `Residual Risks` 非空；③ 本次改动跨越多个功能域或触及契约/状态机。满足任一，由上层（`spec-driven-dev` 编排或 `multi-agent-loop` controller）发起 peer review；上述条件都不满足时，可由 CI + 模板自检兜底
+   - 触发独立审查（跨 agent review）的最小条件：① `Upstream Models` 非 `N/A` 且包含不变量 / 派生关系 / 跨模块关系；② `Residual Risks` 非空；③ 本次改动跨越多个功能域或触及契约/状态机。满足任一，由上层（`spec-driven-dev` 编排或 `multi-agent-loop` controller）发起独立 review——按 `multi-agent-loop` 协议，首轮审查任务由 `agent` 角色执行并产出 `agent-output.md`；仅当需要第二视角挑战该产出时再追加 `peer` 角色。上述条件都不满足时，可由 CI + 模板自检兜底
    - 若状态为 `Blocked`，明确指出阻塞原因与未完成项，不交付伪完成结果
 
 ## 产物与格式
@@ -163,5 +163,5 @@ Golden examples：见 `references/golden-examples.md`
 - `assets/templates/delivered-change.md` — 标准交付模板
 - `references/implementation-checklist.md` — 实现前后检查清单
 - `references/golden-examples.md` — `Delivered` / `Blocked` 示例
-- `../spec-driven-dev/guides/upstream-coverage.md` — `Upstream Coverage Matrix` 的权威结构与机械校验规则
+- `../spec-driven-dev/guides/upstream-coverage.md` — `Upstream Coverage Matrix` 的权威结构与机械校验规则。本 skill 的 6 列模板是该 5 列结构的**严格超集**：把权威结构中的 `Spec 场景` 拆为 `Scenario ID` + `spec-ref` 两列以强化场景级追溯，其余列与语义一致，`check-upstream-coverage.sh` 的锚点存在性与覆盖率校验仍适用
 - `../spec-driven-dev/guides/upstream-ref.md` — `upstream-ref` / `@upstream` 的语法、锚点命名与各阶段落位方式
