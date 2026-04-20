@@ -47,7 +47,7 @@ metadata:
 - orchestrator 负责流程语义，不重复维护 worker 的内容语义
 - 所有新领域信息必须先经过 `modeling-first`
 - Epic 先建模，再 plan，再按模块推进 worker stages
-- 每个阶段完成后必须更新 checkpoint，才能继续下一阶段
+- 每个阶段完成后必须更新并落盘 checkpoint，才能继续下一阶段
 
 ## 入口判断
 
@@ -173,7 +173,6 @@ Epic 的核心是：
 - 审查 agent 只输出发现，controller 逐条裁决并写 `agent-judgment.md`
 - `multi-agent-loop` 的 bounded loop 规则（最大 3 轮、继续/终止/升级判定）完全沿用其自身 SKILL 定义
 - 默认 runner 优先级：`opencode > claude > codex > crush`
-- **Review 收敛后的上下文压缩**：每个 Review 收敛后，orchestrator 先把 `Context Summary Delta` 合并进 `Context Summary` 并清空 Delta，再调用宿主 harness 的压缩指令（`/compact` 或等价）清空工作上下文。Auto 模式强制，Standard 模式强烈建议。Epic 场景的 Plan Review 结束和模块切换都落在通用规则覆盖范围内，不做额外压缩；但并行模块必须串行推进（方案 A）或独立 orchestrator session（方案 B），禁止同 session 真并行 + 会话级压缩。详细规则见 `workflows/auto.md` 的「Review 收敛后的上下文压缩」节
 
 ## Checkpoint And Handoff
 
@@ -191,13 +190,12 @@ Epic 的核心是：
 ### WorkflowCheckpoint
 
 - 作用：断点续接、阶段 gate、`--auto` 恢复执行
-- 最少包含：当前阶段、上一步完成状态、context summary、已知 blockers
-- **Producer**：orchestrator 在每个 stage 完成后立即更新
+- 最少包含：当前阶段、上一步完成状态、`Context Summary`（跨阶段累积摘要，下一会话冷启动的单一续接基线）、已知 blockers
+- **Producer**：orchestrator 在每个阶段完成后立即更新 `Context Summary` 并落盘
 - **Consumer**：下一次会话启动时由 orchestrator 读取，定位续接点
-- **持久化**：
+- **持久化**：每个阶段完成后必须落盘（workflow 续接的唯一可靠来源，与宿主会话状态解耦）
   - Epic 场景：落到 `plan.md` 的 Progress 表及相邻同目录位置（Epic 多 session 并行时按 `workflows/epic.md` 的命名约定，每模块一个文件）
-  - 单模块场景：若触发压缩（Auto 模式强制；Standard 模式强烈建议但允许暂缓）**必须**落盘——`/compact` 会清空会话内状态，会话内 checkpoint 会和压缩前工作上下文一起被清掉，恢复基线将不存在
-  - 单模块 + Standard + 完全不触发压缩：允许仅在会话内维护，但用户明确要求续接时仍必须落盘
+  - 单模块场景：推荐 `.spec-driven-dev/workflow-checkpoint.md`
 
 ## Definition Of Done
 

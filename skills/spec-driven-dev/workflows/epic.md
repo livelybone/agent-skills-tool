@@ -105,22 +105,13 @@ Epic 场景下 Review task-name 必须带模块标识，以便多模块并行：
 - 例：`spec-review-payment-r1`、`impl-review-order-r2`
 - **禁止**跨模块复用同一 task-name（如 `spec-review-r1`——会和其他模块冲突）
 
-### 上下文压缩
+### 并行模块的约束
 
-Review 收敛后触发宿主压缩的规则在 `workflows/auto.md` 的「Review 收敛后的上下文压缩」节统一定义——"每个 Review 收敛 → Delta 合入 Summary → 压缩"。Epic 场景不新增独立触发时机；但以下两个 Epic 主路径边界恰好是该通用规则的关键应用点，值得提醒：
+同一 orchestrator session 的工作上下文和 WorkflowCheckpoint 状态是共享的——无法为多个模块同时维护独立的 `Current Module` / `Context Summary`，宿主 harness 一旦压缩会同时影响所有在途模块。因此并行执行无依赖模块时，必须二选一：
 
-- **Plan Review 收敛后（步骤 5 结束）→ 进入首个模块步骤 6 前**：属于 auto.md 通用规则"Review 收敛后必须压缩"的直接落地。Epic 级信息（`plan.md` + 模块边界）必须先合入 `Context Summary`，模块内部阶段只读 Epic-level 指针
-- **模块 M 步骤 11 Impl Review 收敛 → 模块 M+1 步骤 6 前**：同样是通用规则的落地。此处压缩的关键作用是确保 M 的实现细节不会污染 M+1 的 spec 构思
-
-以上两点不是"额外触发"，**不要重复压缩**——auto.md 的通用规则已覆盖，Decision Log 按通用规则留痕即可。
-
-#### 并行模块的压缩约束
-
-`/compact` 是 orchestrator session 级的副作用——同一 session 内触发一次压缩会清空**所有**活跃模块的在途上下文。因此并行执行无依赖模块时，必须二选一：
-
-- **方案 A（默认，推荐）**：同一 orchestrator session 内**串行**执行所有模块，即使 plan 允许并行。模块切换时按上方「模块切换时」规则压缩。此方案下 WorkflowCheckpoint 单文件即可，`Current Module` 字段随串行进度切换
-- **方案 B**：真正并行时，**每个并行模块启动独立的 orchestrator session**（如单独的 Claude Code 会话）。每个 session 维护独立 WorkflowCheckpoint 文件，文件命名约定为 `<plan.md 所在目录>/checkpoints/<module>-checkpoint.md`，互不干扰。每个 session 按 auto.md 的压缩规则独立触发 `/compact`，不影响其他 session
-- **禁止**：同一 orchestrator session 内真正并行推进多模块并做会话级压缩——会造成在途模块上下文丢失
+- **方案 A（默认，推荐）**：同一 orchestrator session 内**串行**执行所有模块，即使 plan 允许并行。WorkflowCheckpoint 单文件即可，`Current Module` 字段随串行进度切换
+- **方案 B**：真正并行时，**每个并行模块启动独立的 orchestrator session**（如独立的 Claude Code 会话）。每个 session 维护独立 WorkflowCheckpoint 文件，命名约定为 `<plan.md 所在目录>/checkpoints/<module>-checkpoint.md`，互不干扰
+- **禁止**：同一 orchestrator session 内真正并行推进多模块——会造成模块间上下文互相覆盖
 
 方案选择必须在 Decision Log 的 Plan Review 决策条目中显式记录（`并行策略: serial | multi-session`）。
 

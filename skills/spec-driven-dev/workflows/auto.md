@@ -56,26 +56,23 @@ Review 阶段在 auto 模式下**不可跳过**。执行机制、裁决、继续
 | `test-review` | 步骤 9 | `prompts/test-review.md` | Test Scenarios + Executable Tests + Red Run 结果 | `test-design-and-implementation`；若发现 spec 语义缺口则 `tech-spec-writing` |
 | `impl-review` | 步骤 11 | `prompts/impl-review.md` | `DeliveredChange` + 实现代码 | `feature-implementation-from-spec`；若发现 spec/test 语义冲突则对应上游 worker |
 
-### Review 收敛后的上下文压缩
+### Review 收敛后的 Checkpoint 更新
 
-每个 Review 阶段收敛后、进入下一 content 阶段之前，orchestrator **必须**调用宿主 coding-agent 的压缩指令清空本阶段累积的工作上下文。
+基础规则（`SKILL.md` 核心原则 + WorkflowCheckpoint 节）：每个阶段完成后必须更新 `Context Summary` 并落盘 `WorkflowCheckpoint`。Review 收敛是 content 阶段的收敛点之一，除基础规则外还需做 Review 特有动作——
 
-- **触发时机**：Review 收敛（无真 Major）→ 按下方「压缩前必须就绪的持久化状态」完成落盘 + Delta 合入 Summary → 再触发压缩；不得在 checkpoint 未落盘前或 Delta 未合并前压缩
-- **调用方式**：按 orchestrator 所在宿主 harness 执行对应指令
-  - Claude Code → `/compact`
-  - OpenCode → `/compact`
-  - 其他 harness（含 Codex 等）→ 以该 harness 官方文档中的等价指令为准；若 harness 不支持压缩，本步骤降级为 no-op 并在 Decision Log 的「压缩状态」字段写 `unsupported:<harness 名>`
-- **压缩前必须就绪的持久化状态**：
-  - `WorkflowCheckpoint` 已更新（`Current Stage` / `Last Completed Stage` / `Context Summary` / `Context Summary Delta`）
-  - 本轮 `agent-output.md` / `agent-judgment.md` 已落盘（`.agent-loop/<task-name>/`）
-  - 若本轮拉起过 peer：`peer-output.md` / `peer-judgment.md` 也已落盘
-  - 本阶段修复涉及的代码/文档改动已保存
-  - **Delta → Summary 合并**：压缩前最后一步，controller 必须把本阶段 `Context Summary Delta` 的条目合并进 `Context Summary`，然后清空 Delta。`Context Summary` 是跨阶段累积的单一恢复基线；`Context Summary Delta` 仅在"当前阶段新增且尚未合入 Summary"的窗口期使用
-- **压缩后下一阶段的上下文恢复来源**（单一真源，按优先级）：
-  1. `WorkflowCheckpoint.Context Summary`（跨阶段累积摘要；Delta 已在压缩前合入这里）
-  2. 上游 worker 产出的 artifact 文件（spec / test / model / plan / DeliveredChange 等，读文件而非依赖记忆）
-  3. 最近一轮 `agent-judgment.md`（以及存在时的 `peer-judgment.md`）——需要理解上一 Review 的裁决理由时读取
-- **升级情形**：若压缩后发现下游阶段需要的关键信息未被 checkpoint / artifact / judgment 捕获（即 Context Summary 写漏了当时的 Delta），属于 Decision Log 质量问题 → 回溯到产生该信息的阶段，从文件重建上下文并补写 `Context Summary`
+每个 Review 阶段收敛后、进入下一 content 阶段之前，orchestrator 必须：
+
+- 把本轮 `agent-output.md` / `agent-judgment.md` 落盘（`.agent-loop/<task-name>/`）；若本轮拉起过 peer，`peer-output.md` / `peer-judgment.md` 同样落盘
+- 保存本阶段修复涉及的代码/文档改动
+- 执行基础规则：把本阶段新增的关键信息并入 `Context Summary`，更新并落盘 `WorkflowCheckpoint`（`Current Stage` / `Last Completed Stage` / `Context Summary`）
+
+下一阶段的上下文恢复来源（按优先级）：
+
+1. `WorkflowCheckpoint.Context Summary`（跨阶段累积摘要）
+2. 上游 worker 产出的 artifact 文件（spec / test / model / plan / DeliveredChange 等）
+3. 最近一轮 `agent-judgment.md`（以及存在时的 `peer-judgment.md`）——需要理解上一 Review 的裁决理由时读取
+
+若下游阶段需要的关键信息未被 checkpoint / artifact / judgment 捕获（即 Context Summary 写漏了本阶段的新增），属于 Decision Log 质量问题 → 回溯到产生该信息的阶段，从文件重建上下文并补写 `Context Summary`。
 
 ## 步骤 1 — Intake And Route
 
@@ -230,7 +227,7 @@ Review 阶段在 auto 模式下**不可跳过**。执行机制、裁决、继续
 - 不得跳过 `agent-judgment.md` 裁决文件（multi-agent-loop 的 judgment gate 会直接拒绝下一轮）
 - 不得把 worker 模板直接复制回 orchestrator 中维护
 - 不得在未生成阶段正式产物时伪造"已完成"状态
-- 不得以"上下文太长"为由暂停普通流程；应先写 checkpoint 再继续
+- 不得以"上下文太长"为由暂停普通流程；应先完成 Review 收敛并落盘 checkpoint，再把压缩时机交还给宿主 harness
 
 ## 升级边界
 
@@ -268,14 +265,9 @@ Auto run 完成时，用户应能看到：
 - 输入摘要：<关键输入>
 - 结果：<完成 / 回退 / blocked / escalated>
 - 关键 findings（Review 阶段）：<controller 裁决后的真 Critical/Major 条目摘要>
-- Context Summary Delta（合并前）：<本阶段新增、压缩前已合入 Context Summary 的关键信息；若本阶段无新增隐性信息，写 `无`>
+- Context Summary 新增：<本阶段并入 `Context Summary` 的关键信息；若本阶段无新增，写 `无`>
 - 原因：<为什么>
 - 后续动作：<next stage / retry / escalation>
-- 压缩状态（Review 阶段）：<compacted | unsupported:<harness 名> | skipped:<原因>>
 ```
 
-**编码约定**：
-
-- Decision Log 的「压缩状态」只有三种字符串：`compacted` / `unsupported:<harness 名>` / `skipped:<原因>`
-- `WorkflowCheckpoint.Last Compaction` 用结构化字段（`harness` / `status` / `at`）承载同一事件；两者信息互补：Decision Log 按阶段记录"是否压缩"，Checkpoint 记录最近一次压缩的详细元数据
-- `Context Summary Delta` 是压缩安全性的核心字段：压缩前必须合入 `Context Summary` 并在 Decision Log 中留副本（本行），压缩后 Checkpoint 的 Delta 字段应被清空。合并规则的完整说明见「Review 收敛后的上下文压缩」节
+**编码约定**：`Context Summary` 是跨阶段累积的单一续接基线，供下一会话冷启动使用；每个阶段完成时必须把本阶段新增并入 `Context Summary`，并在 Decision Log 的「Context Summary 新增」字段留副本

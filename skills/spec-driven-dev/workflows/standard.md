@@ -30,19 +30,11 @@ Review 阶段的执行机制、角色、task-name、裁决规则与 `workflows/a
 
 每个阶段完成后都要：
 
-- 更新 `WorkflowCheckpoint`（含 `Context Summary Delta`）
+- 把本阶段新增的关键信息并入 `Context Summary`，更新并落盘 `WorkflowCheckpoint`
 - 记录当前 blockers / open questions 摘要
 - 明确下一个 worker（或 Review runner）和 handoff 输入
 
-## Review 收敛后的上下文压缩
-
-规则与 `workflows/auto.md` 的「Review 收敛后的上下文压缩」**完全一致**——触发时机、宿主指令、压缩前就绪条件、压缩后恢复来源、升级情形均沿用 auto.md 定义。
-
-Standard 模式下的唯一差异：
-
-- Auto 模式强制压缩；Standard 模式**强烈建议**压缩，允许在用户保留的人工 gate 处暂缓（例如用户正在审阅上一阶段产物）
-- 若本阶段被合法跳过（complexity 档位允许），同样不需要压缩该 Review 阶段
-- 跳过压缩时必须在 Decision Log 的「压缩状态」字段写明 `skipped:<reason>`
+Review 收敛后的 Checkpoint 更新规则与 `workflows/auto.md` 的「Review 收敛后的 Checkpoint 更新」节一致。Standard 模式下若某 Review 被合法跳过（complexity 档位允许），跳过事实在 Decision Log 留痕；上一 content 阶段的新增已在该 content 阶段完成时并入 Summary，跳过 Review 不影响续接基线。
 
 ## 步骤 1 — Intake And Route
 
@@ -220,10 +212,9 @@ Standard 模式下的唯一差异：
 
 ## Decision Log 字段
 
-Standard 模式的 Decision Log 字段与 `workflows/auto.md` 的「Decision Log 字段」节**完全共用**（包括 `Context Summary Delta（合并前）` / `压缩状态` 等压缩相关字段）。本文件不复述字段列表。
+Standard 模式的 Decision Log 字段与 `workflows/auto.md` 的「Decision Log 字段」节**完全共用**。本文件不复述字段列表。
 
 Standard 模式特有补充（不在 auto.md 中定义的）：
 
 - `模式` 字段写 `standard`
-- **Review 阶段合法跳过时**，额外记一行 `跳过理由：<complexity 判定 + 具体理由>`，同时 `调用 worker / runner` 字段写 `skipped`，`结果` 字段写 `skipped`
-- Review 阶段被跳过时，`压缩状态` 字段写 `skipped:跳过该 Review，无独立会话上下文可压缩`
+- **Review 阶段合法跳过时**，额外记一行 `跳过理由：<complexity 判定 + 具体理由>`，同时 `调用 worker / runner` 字段写 `skipped`，`结果` 字段写 `skipped`，`Context Summary 新增` 字段写 `无`
