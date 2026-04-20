@@ -136,6 +136,19 @@ case "$RUNNER" in
     ;;
 esac
 
+# Round-cap gate: hard cap at 3 rounds for <step>-<module>-r<N> tasks; see SKILL.md §「有界循环」.
+if [[ "$ROLE" == "agent" && "$PREPARED_STATUS_FILE" -eq 0 ]]; then
+  if [[ "$TASK_NAME" =~ -r([0-9]+)$ ]]; then
+    round_num="${BASH_REMATCH[1]}"
+    if (( round_num > 3 )); then
+      echo "round-cap gate: multi-agent-loop 硬上限 3 轮，task-name '$TASK_NAME' 超限（N=$round_num）。" >&2
+      echo "无 override 入口（刻意设计）。需要继续时在 controller 层调整策略：拆分 scope / 降低单轮深度 / escalate 给用户。" >&2
+      echo "详见 SKILL.md §「有界循环」终止条件。" >&2
+      exit 2
+    fi
+  fi
+fi
+
 if [[ ! -f "$PROMPT_FILE" ]]; then
   if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
     write_status "error"
