@@ -409,6 +409,9 @@ function isRepoLike(input: string): boolean {
   if (input.endsWith(".git")) {
     return true;
   }
+  if (input.startsWith("./") || input.startsWith("../") || input.startsWith("/")) {
+    return false;
+  }
   return /^[\w.-]+\/[\w.-]+$/.test(input);
 }
 
