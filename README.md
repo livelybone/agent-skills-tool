@@ -20,12 +20,17 @@ npm run build
 ```bash
 agent-skills-tool -i /path/to/skill
 agent-skills-tool -i /path/to/skill /path/to/project
+agent-skills-tool -i /path/to/skills-dir                 # 批量：目录下每个含 SKILL.md 的子目录都会被安装
 agent-skills-tool -i https://github.com/owner/repo --subdir skills/my-skill
 agent-skills-tool -i owner/repo --subdir skills/my-skill
 agent-skills-tool -i https://github.com/owner/repo/tree/main/skills/my-skill
 agent-skills-tool -r my-skill
 agent-skills-tool -r my-skill /path/to/project
 ```
+
+### 批量安装
+
+传入的路径（或 `--subdir` 指向的目录）根部若没有 `SKILL.md`，工具会扫描其一层子目录，把每个含 `SKILL.md` 的子目录都当作一个 skill 安装。冲突处理与单个安装相同（`--force`、`--merge` 会作用到批量中的每一个）。
 
 ### 冲突处理
 

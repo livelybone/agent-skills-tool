@@ -28,7 +28,7 @@ type RepoSpec = {
 };
 
 type ResolveResult = {
-  skillDir: string;
+  skillDirs: string[];
   cleanup?: () => Promise<void>;
 };
 
@@ -99,65 +99,94 @@ async function runInstall({
   const skillInput = isRepoLike(resolvedSkillPath)
     ? resolvedSkillPath
     : path.resolve(resolvedSkillPath);
-  const { skillDir, cleanup } = await resolveSkillSource(skillInput, { subdir, ref });
+  const { skillDirs, cleanup } = await resolveSkillSource(skillInput, { subdir, ref });
 
   try {
-    const skillFile = path.join(skillDir, "SKILL.md");
-    const skillContents = await fs.readFile(skillFile, "utf8");
-    const { data: frontmatter } = matter(skillContents);
+    const targets = getInstallTargets(destinationProjectPath);
+    const batch = skillDirs.length > 1;
 
-    validateFrontmatter(frontmatter, skillFile);
-
-    const skillName = String(frontmatter.name).trim();
-    const skillDirName = path.basename(skillDir);
-    if (skillDirName !== skillName) {
-      console.warn(
-        `Warning: skill directory name "${skillDirName}" does not match SKILL.md name "${skillName}". Using SKILL.md name for install.`
-      );
+    if (batch) {
+      console.log(`Found ${skillDirs.length} skills in ${skillInput}`);
     }
 
-    const targets = getInstallTargets(destinationProjectPath);
-
-    for (const target of targets) {
-      const targetRoot = target.baseDir;
-      const targetSkillDir = path.join(targetRoot, skillName);
-
-      await fs.mkdir(targetRoot, { recursive: true });
-
-      const exists = await pathExists(targetSkillDir);
-      let action: "overwrite" | "merge" | "skip" = "overwrite";
-
-      if (exists && !force && !merge) {
-        action = await promptConflictAction(target.label, targetSkillDir);
-      } else if (exists && merge) {
-        action = "merge";
-      } else if (exists && force) {
-        action = "overwrite";
-      } else if (!exists) {
-        action = "overwrite";
+    let failed = 0;
+    for (const skillDir of skillDirs) {
+      try {
+        await installSingleSkill(skillDir, targets, { force, merge });
+      } catch (error) {
+        if (!batch) {
+          throw error;
+        }
+        failed += 1;
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Error installing ${path.basename(skillDir)}: ${message}`);
       }
+    }
 
-      if (action === "skip") {
-        console.log(`Skipped ${target.label}: ${targetSkillDir}`);
-        continue;
-      }
-
-      if (action === "overwrite") {
-        await fs.rm(targetSkillDir, { recursive: true, force: true });
-        await copyDir(skillDir, targetSkillDir);
-        console.log(`Installed (${target.label}) -> ${targetSkillDir}`);
-        continue;
-      }
-
-      if (action === "merge") {
-        await copyDir(skillDir, targetSkillDir);
-        console.log(`Merged (${target.label}) -> ${targetSkillDir}`);
-        continue;
-      }
+    if (failed > 0) {
+      throw new Error(`${failed} of ${skillDirs.length} skills failed to install`);
     }
   } finally {
     if (cleanup) {
       await cleanup();
+    }
+  }
+}
+
+async function installSingleSkill(
+  skillDir: string,
+  targets: InstallTarget[],
+  { force, merge }: { force: boolean; merge: boolean }
+): Promise<void> {
+  const skillFile = path.join(skillDir, "SKILL.md");
+  const skillContents = await fs.readFile(skillFile, "utf8");
+  const { data: frontmatter } = matter(skillContents);
+
+  validateFrontmatter(frontmatter, skillFile);
+
+  const skillName = String(frontmatter.name).trim();
+  const skillDirName = path.basename(skillDir);
+  if (skillDirName !== skillName) {
+    console.warn(
+      `Warning: skill directory name "${skillDirName}" does not match SKILL.md name "${skillName}". Using SKILL.md name for install.`
+    );
+  }
+
+  for (const target of targets) {
+    const targetRoot = target.baseDir;
+    const targetSkillDir = path.join(targetRoot, skillName);
+
+    await fs.mkdir(targetRoot, { recursive: true });
+
+    const exists = await pathExists(targetSkillDir);
+    let action: "overwrite" | "merge" | "skip" = "overwrite";
+
+    if (exists && !force && !merge) {
+      action = await promptConflictAction(target.label, targetSkillDir);
+    } else if (exists && merge) {
+      action = "merge";
+    } else if (exists && force) {
+      action = "overwrite";
+    } else if (!exists) {
+      action = "overwrite";
+    }
+
+    if (action === "skip") {
+      console.log(`Skipped ${target.label}: ${targetSkillDir}`);
+      continue;
+    }
+
+    if (action === "overwrite") {
+      await fs.rm(targetSkillDir, { recursive: true, force: true });
+      await copyDir(skillDir, targetSkillDir);
+      console.log(`Installed (${target.label}) -> ${targetSkillDir}`);
+      continue;
+    }
+
+    if (action === "merge") {
+      await copyDir(skillDir, targetSkillDir);
+      console.log(`Merged (${target.label}) -> ${targetSkillDir}`);
+      continue;
     }
   }
 }
@@ -200,12 +229,12 @@ async function resolveSkillSource(
     const repoSubdir = repoSpec.subdir || subdir || "";
     const cloneDir = await fs.mkdtemp(path.join(os.tmpdir(), "agent-skill-"));
     await cloneRepo(repoSpec.repoUrl, cloneDir, ref || repoSpec.ref);
-    const skillDir = await resolveSkillDirFromBase(
+    const skillDirs = await discoverSkillDirs(
       cloneDir,
       repoSubdir ? repoSubdir : null
     );
     return {
-      skillDir,
+      skillDirs,
       cleanup: async () => {
         await fs.rm(cloneDir, { recursive: true, force: true });
       }
@@ -221,29 +250,51 @@ async function resolveSkillSource(
     if (path.basename(resolvedSkillPath) !== "SKILL.md") {
       throw new Error("Skill file must be named SKILL.md");
     }
-    return { skillDir: path.dirname(resolvedSkillPath) };
+    return { skillDirs: [path.dirname(resolvedSkillPath)] };
   }
 
   if (!stat.isDirectory()) {
     throw new Error("Skill path must be a directory or SKILL.md file");
   }
 
-  const skillDir = await resolveSkillDirFromBase(resolvedSkillPath, subdir || null);
-  return { skillDir };
+  const skillDirs = await discoverSkillDirs(resolvedSkillPath, subdir || null);
+  return { skillDirs };
 }
 
-async function resolveSkillDirFromBase(
+async function discoverSkillDirs(
   baseDir: string,
   subdir: string | null
-): Promise<string> {
-  const skillDir = subdir ? path.join(baseDir, subdir) : baseDir;
-  const skillFile = path.join(skillDir, "SKILL.md");
-  const skillFileStat = await fs.stat(skillFile).catch(() => null);
-  if (!skillFileStat || !skillFileStat.isFile()) {
+): Promise<string[]> {
+  const rootDir = subdir ? path.join(baseDir, subdir) : baseDir;
+  const rootStat = await fs.stat(rootDir).catch(() => null);
+  if (!rootStat || !rootStat.isDirectory()) {
     const extra = subdir ? ` (subdir: ${subdir})` : "";
-    throw new Error(`SKILL.md not found in ${skillDir}${extra}`);
+    throw new Error(`Directory not found: ${rootDir}${extra}`);
   }
-  return skillDir;
+
+  if (await pathExists(path.join(rootDir, "SKILL.md"))) {
+    return [rootDir];
+  }
+
+  const entries = await fs.readdir(rootDir, { withFileTypes: true });
+  const skillDirs: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const candidate = path.join(rootDir, entry.name);
+    if (await pathExists(path.join(candidate, "SKILL.md"))) {
+      skillDirs.push(candidate);
+    }
+  }
+
+  if (skillDirs.length === 0) {
+    const extra = subdir ? ` (subdir: ${subdir})` : "";
+    throw new Error(
+      `No SKILL.md found in ${rootDir}${extra} or any immediate subdirectory`
+    );
+  }
+
+  skillDirs.sort();
+  return skillDirs;
 }
 
 function validateFrontmatter(
