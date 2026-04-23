@@ -58,11 +58,9 @@ prompt_protocol_load_template() {
   mapfile -t PROMPT_PROTOCOL_TEMPLATE_LINES < "$PROMPT_PROTOCOL_TEMPLATE_FILE"
 
   PROMPT_PROTOCOL_TYPE_INDEX=-1
-  PROMPT_PROTOCOL_ROLE_INDEX=-1
   PROMPT_PROTOCOL_INSTRUCTION_INDEX=-1
   PROMPT_PROTOCOL_SEVERITY_INDEX=-1
   PROMPT_PROTOCOL_TYPE_PLACEHOLDER=""
-  PROMPT_PROTOCOL_ROLE_PLACEHOLDER=""
 
   for idx in "${!PROMPT_PROTOCOL_TEMPLATE_LINES[@]}"; do
     line="${PROMPT_PROTOCOL_TEMPLATE_LINES[$idx]}"
@@ -74,16 +72,6 @@ prompt_protocol_load_template() {
       fi
       PROMPT_PROTOCOL_TYPE_INDEX=$idx
       PROMPT_PROTOCOL_TYPE_PLACEHOLDER="$line"
-      continue
-    fi
-
-    if [[ "$line" == "- 角色：<"*">" ]]; then
-      if [[ "$PROMPT_PROTOCOL_ROLE_INDEX" -ne -1 ]]; then
-        echo "prompt template is invalid: duplicate role placeholder" >&2
-        return 1
-      fi
-      PROMPT_PROTOCOL_ROLE_INDEX=$idx
-      PROMPT_PROTOCOL_ROLE_PLACEHOLDER="$line"
       continue
     fi
 
@@ -105,8 +93,8 @@ prompt_protocol_load_template() {
     fi
   done
 
-  if [[ "$PROMPT_PROTOCOL_TYPE_INDEX" -lt 0 || "$PROMPT_PROTOCOL_ROLE_INDEX" -lt 0 || "$PROMPT_PROTOCOL_INSTRUCTION_INDEX" -lt 0 ]]; then
-    echo "prompt template is invalid: missing type, role, or instruction placeholder" >&2
+  if [[ "$PROMPT_PROTOCOL_TYPE_INDEX" -lt 0 || "$PROMPT_PROTOCOL_INSTRUCTION_INDEX" -lt 0 ]]; then
+    echo "prompt template is invalid: missing type or instruction placeholder" >&2
     return 1
   fi
 
@@ -121,20 +109,16 @@ prompt_protocol_load_template() {
   fi
 
   prompt_protocol_parse_placeholder_values "$PROMPT_PROTOCOL_TYPE_PLACEHOLDER" PROMPT_PROTOCOL_ALLOWED_TYPES
-  prompt_protocol_parse_placeholder_values "$PROMPT_PROTOCOL_ROLE_PLACEHOLDER" PROMPT_PROTOCOL_ALLOWED_ROLES
   PROMPT_PROTOCOL_TEMPLATE_LOADED=1
 }
 
 prompt_protocol_expected_line() {
   local template_index="$1"
   local prompt_type="$2"
-  local prompt_role="$3"
   local line="${PROMPT_PROTOCOL_TEMPLATE_LINES[$template_index]}"
 
   if [[ "$template_index" -eq "$PROMPT_PROTOCOL_TYPE_INDEX" ]]; then
     line="- 类型：$prompt_type"
-  elif [[ "$template_index" -eq "$PROMPT_PROTOCOL_ROLE_INDEX" ]]; then
-    line="- 角色：$prompt_role"
   fi
 
   printf '%s' "$line"
@@ -149,22 +133,6 @@ prompt_protocol_extract_value() {
   fi
 
   printf '%s' "${line#$prefix}"
-}
-
-prompt_protocol_required_peer_output_line() {
-  local prompt_file="$1"
-  local prompt_dir
-
-  prompt_dir="$(cd "$(dirname "$prompt_file")" && pwd)"
-  printf '主 agent 输出路径：%s/agent-output.md' "$prompt_dir"
-}
-
-prompt_protocol_required_peer_output_file() {
-  local prompt_file="$1"
-  local prompt_dir
-
-  prompt_dir="$(cd "$(dirname "$prompt_file")" && pwd)"
-  printf '%s/agent-output.md' "$prompt_dir"
 }
 
 prompt_protocol_severity_prefix() {
@@ -303,11 +271,10 @@ prompt_protocol_reject_symlink() {
 
 prompt_protocol_validate_prompt_file() {
   local prompt_file="$1"
-  local expected_role="$2"
-  local actual_type_line actual_role_line actual_type actual_role
+  local actual_type_line actual_type
   local prompt_line_count template_line_count prefix_line_count suffix_line_count
   local template_idx prompt_idx instruction_start instruction_end has_instruction_text
-  local expected_line required_peer_line required_peer_file
+  local expected_line
   local -a prompt_lines
 
   prompt_protocol_load_template || return 1
@@ -347,22 +314,8 @@ prompt_protocol_validate_prompt_file() {
     return 1
   fi
 
-  actual_role_line="${prompt_lines[$PROMPT_PROTOCOL_ROLE_INDEX]}"
-  if ! actual_role="$(prompt_protocol_extract_value "$actual_role_line" "- 角色：")"; then
-    echo "prompt file does not follow template: invalid role line '$actual_role_line'" >&2
-    return 1
-  fi
-  if ! prompt_protocol_value_allowed "$actual_role" "${PROMPT_PROTOCOL_ALLOWED_ROLES[@]}"; then
-    echo "prompt file does not follow template: role '$actual_role' is not allowed by template" >&2
-    return 1
-  fi
-  if [[ "$actual_role" != "$expected_role" ]]; then
-    echo "prompt file role does not match runner role: expected '$expected_role', got '$actual_role'" >&2
-    return 1
-  fi
-
   for ((template_idx = 0; template_idx < prefix_line_count; template_idx++)); do
-    expected_line="$(prompt_protocol_expected_line "$template_idx" "$actual_type" "$actual_role")"
+    expected_line="$(prompt_protocol_expected_line "$template_idx" "$actual_type")"
     if [[ "${prompt_lines[$template_idx]}" != "$expected_line" ]]; then
       echo "prompt file does not follow template at line $((template_idx + 1)): expected '$expected_line'" >&2
       return 1
@@ -405,22 +358,6 @@ prompt_protocol_validate_prompt_file() {
     return 1
   fi
 
-  if [[ "$actual_role" == "peer" ]]; then
-    required_peer_line="$(prompt_protocol_required_peer_output_line "$prompt_file")"
-    if [[ "${prompt_lines[$instruction_start]}" != "$required_peer_line" ]]; then
-      echo "peer prompt does not follow template: expected first instruction line '$required_peer_line'" >&2
-      return 1
-    fi
-    required_peer_file="$(prompt_protocol_required_peer_output_file "$prompt_file")"
-    if [[ ! -f "$required_peer_file" ]]; then
-      echo "peer prompt does not follow protocol: required agent output missing at '$required_peer_file'" >&2
-      return 1
-    fi
-    if ! prompt_protocol_reject_symlink "$required_peer_file" "peer agent output"; then
-      return 1
-    fi
-  fi
-
   has_instruction_text=0
   local -a severity_levels_seen=()
   local severity_level trimmed_line raw_line content_line next_content
@@ -428,9 +365,6 @@ prompt_protocol_validate_prompt_file() {
   local fence_marker fence_marker_char fence_marker_len target cell
   local -a cells targets
   for ((prompt_idx = instruction_start; prompt_idx <= instruction_end; prompt_idx++)); do
-    if [[ "$actual_role" == "peer" && "$prompt_idx" -eq "$instruction_start" ]]; then
-      continue
-    fi
     raw_line="${prompt_lines[$prompt_idx]}"
     trimmed_line="$(prompt_protocol_trim "$raw_line")"
     if [[ -n "$trimmed_line" ]]; then

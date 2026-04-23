@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/prompt_protocol.sh"
 DETACH_MODE="none"
 PREPARED_STATUS_FILE=0
 SKIP_JUDGMENT_CHECK=0
+ALLOW_ROUND_OVERFLOW=0
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
     --prepared-status-file)
@@ -15,6 +16,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-judgment-check)
       SKIP_JUDGMENT_CHECK=1
+      shift
+      ;;
+    --allow-round-overflow)
+      ALLOW_ROUND_OVERFLOW=1
       shift
       ;;
     --detach=*)
@@ -44,21 +49,26 @@ case "$DETACH_MODE" in
     ;;
 esac
 
-if [[ $# -lt 4 ]]; then
-  echo "usage: $0 [--detach=auto|tmux|none] [--skip-judgment-check] <runner: codex|claude|crush|opencode> <task-name> <prompt-file> <role: agent|peer> [workdir]" >&2
+if [[ $# -lt 3 ]]; then
+  echo "usage: $0 [--detach=auto|tmux|none] [--skip-judgment-check] [--allow-round-overflow] <runner: codex|claude|crush|opencode> <task-name> <round-number> [workdir]" >&2
   exit 2
 fi
 
 RUNNER="$1"
 TASK_NAME="$2"
-PROMPT_FILE="$3"
-ROLE="$4"
-WORKDIR="${5:-$PWD}"
+ROUND="$3"
+WORKDIR="${4:-$PWD}"
 SELF_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 
 # TASK_NAME 合法性校验：仅允许字母、数字、连字符、下划线、点（但不能是纯 "." 或 ".."）
 if [[ ! "$TASK_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
   echo "invalid task-name: '$TASK_NAME' (must start with alphanumeric, only contain [a-zA-Z0-9._-])" >&2
+  exit 2
+fi
+
+# ROUND 必须是正整数
+if [[ ! "$ROUND" =~ ^[1-9][0-9]*$ ]]; then
+  echo "invalid round-number: '$ROUND' (must be a positive integer)" >&2
   exit 2
 fi
 
@@ -71,32 +81,11 @@ fi
 [[ "$WORKDIR" != /* ]] && WORKDIR="$PWD/$WORKDIR"
 
 TASK_DIR="$WORKDIR/.agent-loop/$TASK_NAME"
-
-# 将 PROMPT_FILE 转为绝对路径，基于 WORKDIR 而非 PWD
-if [[ "$PROMPT_FILE" != /* ]]; then
-  PROMPT_FILE="$WORKDIR/$PROMPT_FILE"
-fi
-
-case "$ROLE" in
-  agent)
-    EXPECTED_PROMPT_FILE="$TASK_DIR/agent-task.md"
-    OUTPUT_FILE="$TASK_DIR/agent-output.md"
-    LOG_FILE="$TASK_DIR/agent.log"
-    STATUS_FILE="$TASK_DIR/agent-status.txt"
-    ;;
-  peer)
-    EXPECTED_PROMPT_FILE="$TASK_DIR/peer-task.md"
-    OUTPUT_FILE="$TASK_DIR/peer-output.md"
-    LOG_FILE="$TASK_DIR/peer.log"
-    STATUS_FILE="$TASK_DIR/peer-status.txt"
-    ;;
-  *)
-    echo "unsupported role: $ROLE (must be agent or peer)" >&2
-    # STATUS_FILE 未定义，无法写入 status；提前退出是安全的，
-    # 因为 task dir 也未创建，controller 不会误判为"仍在运行"
-    exit 2
-    ;;
-esac
+ROUND_DIR="$TASK_DIR/r$ROUND"
+PROMPT_FILE="$TASK_DIR/agent-task.md"
+OUTPUT_FILE="$ROUND_DIR/agent-output.md"
+LOG_FILE="$ROUND_DIR/agent.log"
+STATUS_FILE="$ROUND_DIR/agent-status.txt"
 
 ensure_git_exclude() {
   local git_dir exclude_file
@@ -136,78 +125,75 @@ case "$RUNNER" in
     ;;
 esac
 
-# Round-cap gate: hard cap at 3 rounds for <step>-<module>-r<N> tasks; see SKILL.md §「有界循环」.
-if [[ "$ROLE" == "agent" && "$PREPARED_STATUS_FILE" -eq 0 ]]; then
-  if [[ "$TASK_NAME" =~ -r([0-9]+)$ ]]; then
-    round_num="${BASH_REMATCH[1]}"
-    if (( round_num > 3 )); then
-      echo "round-cap gate: multi-agent-loop 硬上限 3 轮，task-name '$TASK_NAME' 超限（N=$round_num）。" >&2
-      echo "无 override 入口（刻意设计）。需要继续时在 controller 层调整策略：拆分 scope / 降低单轮深度 / escalate 给用户。" >&2
-      echo "详见 SKILL.md §「有界循环」终止条件。" >&2
-      exit 2
-    fi
+# Round-cap gate: 3 轮硬上限。超限时 controller 应在上层调整策略
+# （拆分 scope / 降低单轮深度 / escalate 给用户），不要盲目加轮数。
+# --allow-round-overflow 仅供调试与回归测试使用，日常流程不应依赖。
+# 注意：此 gate 不因 --prepared-status-file 而旁路——detach 模式下 child
+# 重跑 gate 与 parent 答案一致（ROUND 是纯参数），零成本换物理防御面。
+if (( ROUND > 3 )) && [[ "$ALLOW_ROUND_OVERFLOW" -eq 0 ]]; then
+  if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
+    write_status "error"
   fi
+  echo "round-cap gate: multi-agent-loop 硬上限 3 轮，当前 round=$ROUND 超限。" >&2
+  echo "正当做法：在 controller 层调整策略——拆分 scope / 降低单轮深度 / escalate 给用户。" >&2
+  echo "仅调试/测试场景可用 --allow-round-overflow 绕过。" >&2
+  echo "详见 SKILL.md §「有界循环」终止条件。" >&2
+  exit 2
 fi
 
 if [[ ! -f "$PROMPT_FILE" ]]; then
   if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
     write_status "error"
   fi
-  echo "prompt file not found: $PROMPT_FILE" >&2
+  echo "agent-task.md not found: $PROMPT_FILE" >&2
+  echo "setup 阶段未完成——请先在 $TASK_DIR/ 下合成 agent-task.md 并通过 validate_task.sh 自检。" >&2
   exit 2
 fi
 
-if [[ "$PROMPT_FILE" != "$EXPECTED_PROMPT_FILE" ]]; then
-  if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
-    write_status "error"
-  fi
-  echo "prompt file must be canonical for task/role: expected $EXPECTED_PROMPT_FILE, got $PROMPT_FILE" >&2
-  exit 2
-fi
-
-if ! prompt_protocol_validate_prompt_file "$PROMPT_FILE" "$ROLE"; then
+if ! prompt_protocol_validate_prompt_file "$PROMPT_FILE"; then
   if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
     write_status "error"
   fi
   exit 2
 fi
 
-# Judgment gate: before launching a new agent round, every previously
-# completed agent or peer run in this workdir must have its own written
-# judgment file (agent-judgment.md for agent findings, peer-judgment.md
-# for peer findings) capturing the controller's re-evaluation. This is
-# the forcing function against "autopilot Critical-fixing"—see SKILL.md.
-# Only enforced on fresh agent launches (peer reruns stay within a task).
-# Use --skip-judgment-check to bypass for historical cleanup or unit tests.
-if [[ "$ROLE" == "agent" && "$SKIP_JUDGMENT_CHECK" -eq 0 && "$PREPARED_STATUS_FILE" -eq 0 ]]; then
+# Judgment gate: 启动新轮之前，同一 task-name 下所有已 done 的历史轮次必须
+# 各自有 agent-judgment.md（controller 逐条独立重评的产物）。这是 SKILL.md
+# §「controller 裁决与 judgment 文件」的物理门，用来对抗 autopilot Critical-fixing。
+# --skip-judgment-check 仅用于历史清理、自动化测试等非日常场景。
+# 注意：此 gate 不因 --prepared-status-file 而旁路——detach 模式下 child
+# 重跑 gate 与 parent 答案一致（其他轮次状态在 parent→child 期间不变），
+# 零成本换物理防御面，避免 --prepared-status-file 被当成隐藏绕过入口。
+if [[ "$SKIP_JUDGMENT_CHECK" -eq 0 ]]; then
   missing_judgments=()
-  loop_dir="$WORKDIR/.agent-loop"
-  if [[ -d "$loop_dir" ]]; then
-    for existing_task_dir in "$loop_dir"/*/; do
-      [[ -d "$existing_task_dir" ]] || continue
-      existing_task_name="$(basename "$existing_task_dir")"
-      [[ "$existing_task_name" == "$TASK_NAME" ]] && continue
-      for sub_role in agent peer; do
-        status_file="${existing_task_dir}${sub_role}-status.txt"
-        output_file="${existing_task_dir}${sub_role}-output.md"
-        judgment_file="${existing_task_dir}${sub_role}-judgment.md"
-        if [[ -f "$status_file" && -f "$output_file" ]]; then
-          status_content="$(< "$status_file")"
-          if [[ "$status_content" == "done" && ( ! -s "$judgment_file" ) ]]; then
-            missing_judgments+=("$judgment_file")
-          fi
+  if [[ -d "$TASK_DIR" ]]; then
+    for existing_round_dir in "$TASK_DIR"/r*/; do
+      [[ -d "$existing_round_dir" ]] || continue
+      existing_round_name="$(basename "$existing_round_dir")"
+      # 跳过当前轮自身（允许同轮重跑清理后重新启动）
+      [[ "$existing_round_name" == "r$ROUND" ]] && continue
+      existing_status_file="${existing_round_dir}agent-status.txt"
+      existing_output_file="${existing_round_dir}agent-output.md"
+      existing_judgment_file="${existing_round_dir}agent-judgment.md"
+      if [[ -f "$existing_status_file" && -f "$existing_output_file" ]]; then
+        existing_status_content="$(< "$existing_status_file")"
+        if [[ "$existing_status_content" == "done" && ( ! -s "$existing_judgment_file" ) ]]; then
+          missing_judgments+=("$existing_judgment_file")
         fi
-      done
+      fi
     done
   fi
   if (( ${#missing_judgments[@]} > 0 )); then
-    echo "judgment gate: cannot launch new task while prior runs lack a controller judgment." >&2
+    if [[ "$PREPARED_STATUS_FILE" -eq 1 && -f "$STATUS_FILE" ]]; then
+      write_status "error"
+    fi
+    echo "judgment gate: cannot launch new round while prior rounds in '$TASK_NAME' lack a controller judgment." >&2
     echo "Missing judgment files:" >&2
     for f in "${missing_judgments[@]}"; do
       echo "  - $f" >&2
     done
     echo "Write one line per finding in each missing file, format:" >&2
-    echo "  [<id>] <agent|peer>:<Severity> → controller:<Severity>  reason: <one-line justification>" >&2
+    echo "  [<id>] agent:<Severity> → controller:<Severity>  reason: <one-line justification>" >&2
     echo "See SKILL.md §「controller 裁决与 judgment 文件」 for details." >&2
     echo "Pass --skip-judgment-check to bypass (e.g., for historical cleanup)." >&2
     exit 2
@@ -229,17 +215,28 @@ if [[ "$DETACH_MODE" == "tmux" ]]; then
   fi
 
   if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" || -e "$STATUS_FILE" ]]; then
-    echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+    echo "round $ROUND already has artifacts under $ROUND_DIR (use a new round-number or clean up first)" >&2
     exit 2
   fi
 
-  mkdir -p "$TASK_DIR"
+  mkdir -p "$ROUND_DIR"
   : > "$STATUS_FILE"
   trap finalize_prelaunch_status EXIT
   ensure_git_exclude
 
-  DETACH_SESSION="agent-loop-${TASK_NAME//[^a-zA-Z0-9_.-]/-}-$$"
-  DETACH_CMD="$(printf '%q ' "$SELF_PATH" "--prepared-status-file" "$RUNNER" "$TASK_NAME" "$PROMPT_FILE" "$ROLE" "$WORKDIR")"
+  DETACH_SESSION="agent-loop-${TASK_NAME//[^a-zA-Z0-9_.-]/-}-r${ROUND}-$$"
+  # 透传 parent 上用户显式传入的 gate-bypass flag 到 child——否则 child 重跑 gate 时会
+  # 与 parent 判定不一致（parent 跳过、child 拦掉），导致推荐的 detach 模式下
+  # --skip-judgment-check / --allow-round-overflow 失效。
+  detach_args=("$SELF_PATH" "--prepared-status-file")
+  if [[ "$SKIP_JUDGMENT_CHECK" -eq 1 ]]; then
+    detach_args+=("--skip-judgment-check")
+  fi
+  if [[ "$ALLOW_ROUND_OVERFLOW" -eq 1 ]]; then
+    detach_args+=("--allow-round-overflow")
+  fi
+  detach_args+=("$RUNNER" "$TASK_NAME" "$ROUND" "$WORKDIR")
+  DETACH_CMD="$(printf '%q ' "${detach_args[@]}")"
   if ! tmux new-session -d -s "$DETACH_SESSION" "cd $(printf '%q' "$WORKDIR") && exec ${DETACH_CMD% }"; then
     write_status "error"
     exit 1
@@ -249,13 +246,13 @@ if [[ "$DETACH_MODE" == "tmux" ]]; then
   exit 0
 fi
 
-mkdir -p "$TASK_DIR"
+mkdir -p "$ROUND_DIR"
 
-# 同一 task-name + role 只允许执行一次，避免后续轮次静默覆盖前一轮产物。
+# 同一 round 只允许执行一次，避免后续轮次静默覆盖前一轮产物。
 if [[ "$PREPARED_STATUS_FILE" -eq 1 ]]; then
   if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" ]]; then
     write_status "error"
-    echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+    echo "round $ROUND already has artifacts under $ROUND_DIR (use a new round-number or clean up first)" >&2
     exit 2
   fi
   if [[ ! -f "$STATUS_FILE" ]]; then
@@ -264,7 +261,7 @@ if [[ "$PREPARED_STATUS_FILE" -eq 1 ]]; then
   fi
 else
   if [[ -e "$OUTPUT_FILE" || -e "$LOG_FILE" || -e "$STATUS_FILE" ]]; then
-    echo "task-name already has $ROLE artifacts: $TASK_NAME (use a unique task-name per round)" >&2
+    echo "round $ROUND already has artifacts under $ROUND_DIR (use a new round-number or clean up first)" >&2
     exit 2
   fi
   : > "$STATUS_FILE"
