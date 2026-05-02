@@ -1,11 +1,13 @@
-# Workflow Checkpoint
+# Workflow Checkpoint（流程检查点）
 
-> **文件命名约定**（每个阶段完成后必须落盘，详见 `../SKILL.md` 的 Checkpoint And Handoff 节）：
-> - **单模块**：推荐 `.spec-driven-dev/workflow-checkpoint.md`（仓库根下隐藏目录，单文件）；若使用者另有偏好可自选但需在首次 Decision Log 中记录路径
-> - **Epic 串行**（`workflows/epic.md` 方案 A）：推荐 `<plan.md 所在目录>/checkpoint.md`
-> - **Epic 多 session 并行**（`workflows/epic.md` 方案 B）：每模块一个文件，**必须**命名为 `<plan.md 所在目录>/checkpoints/<module>-checkpoint.md`
+> **文件命名约定**（每个阶段完成后必须落盘，详见 `../SKILL.md` 的「编排契约」）：
+> - **单模块**：`.spec-driven-dev/single/single/checkpoint.md`
+> - **Epic 级步骤**：`.spec-driven-dev/<EpicName>/_workflow/checkpoint.md`
+> - **Epic 模块步骤**：`.spec-driven-dev/<EpicName>/<ModuleName>/checkpoint.md`
+> - **Epic 多 session 并行**：每个并行 session 只维护自己的模块 checkpoint，禁止多个 session 共享同一个 checkpoint 文件
 
 **Run Mode**: `<standard | auto>`
+`Run Mode` 必须填写为 `standard` 或 `auto`；检查脚本会拒绝占位符。
 **Scope**: `<single-module | epic>`
 **Epic Parallel Strategy** (Epic only): `<serial | multi-session | N/A>`
 **Current Stage**: `<intake | clarification | modeling | modeling-review | exemption-review | plan | plan-review | tech-spec | spec-review | test-design-and-implementation | test-review | feature-implementation | impl-review | verification | epic-summary>`
@@ -15,20 +17,30 @@
 **Modeling Status**: `<models-ready | exemption-approved | modeling-blocked>`
 **Modeling Exemption**:
 - `none`
+- or, when exemption is used:
 - `clause: <modeling-first skip clause>`
 - `clause_source: <file:line>`
 - `rationale: <why this change qualifies>`
 - `evidence: <files / diff size / untouched modeling areas>`
 **Active Review Task**:
 - `none`
-- `task-name: <stage>-<module>-rN`
+- `task-name: <review-stage>-<module>`
 - `runner: <opencode | claude | codex | crush>`
 - `round: <1 | 2 | 3>`
 - `status: <pending | running | done | error>`
+**Artifact Index**:
+- `<checkpoint-key>`: `<artifact path>`
+**Stage Results**:
+- `<checkpoint-key>`: `<stage-result path>`
+**Review Results**:
+- `<checkpoint-key>`: executed:.agent-loop/<task-name>/r<N>/agent-judgment.md
+- `<checkpoint-key>`: skipped:<complexity + reason>
+
+`<checkpoint-key>` is `<module>/<stage-key>` from `SKILL.md` Stage Registry, for example `single/modeling`, `_workflow/plan`, or `payment/tech-spec`. Use the same key as the matching Stage Results entry. Clarification is exempt from independent Review. Review task names use `<review-stage>-<module>`, for example `spec-review-single`, `plan-review-_workflow`, or `impl-review-payment`.
 **Context Summary** (跨阶段累积摘要；下一会话冷启动的单一续接基线；每个阶段完成时把本阶段新增的关键信息并入此处):
 - `<summary-1>`
 - `<summary-2>`
 **Known Blockers**:
 - `none`
-**Next Action**: `<route next worker, start next Review stage, or wait for user>`
+**Next Action**: `<start Review Decision | start Review stage | record legal Review skip | route next worker after Review Results exists | wait for user>`
 **Updated**: `<ISO-timestamp>`

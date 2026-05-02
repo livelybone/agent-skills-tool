@@ -10,8 +10,8 @@
 #      cross-module relationship declared in the upstream modeling unit).
 #   3. Every "持有聚合" upstream-ref uses an Aggregate.* anchor.
 #   4. Every Aggregate.* anchor declared in the listed upstream modeling
-#      units is "held" by at least one plan module (ONLY enforced when
-#      --upstream is provided; plan-internal checks 1-3 still run without it).
+#      units is "held" by at least one plan module. `--upstream` is required
+#      because Epic plans cannot prove aggregate coverage from plan-local refs.
 #
 # Path convention (modeling-first v0.3+):
 #   upstream-refs point to `<path>/<scenario>/<name>.md#<Namespace>.<Name>`
@@ -21,11 +21,10 @@
 #
 # Anchor existence against the upstream modeling units is validated by
 # check-upstream-coverage.sh; this script focuses on Plan-specific
-# structural constraints and (optionally, with --upstream) aggregate
-#落位 coverage.
+# structural constraints and aggregate落位 coverage.
 #
 # Usage:
-#   check-plan-structure.sh --plan <path/to/plan.md> [--upstream <path>,...]
+#   check-plan-structure.sh --plan <path/to/plan.md> --upstream <path>,...
 #   check-plan-structure.sh --self-test
 #
 # Exit codes:
@@ -81,7 +80,7 @@ if [[ "$SELF_TEST" == "1" ]]; then
     local name="$1"; local expected="$2"; local content="$3"
     echo "$content" > plan.md
     local actual
-    bash "$SELF_SCRIPT" --plan plan.md >/dev/null 2>&1
+    bash "$SELF_SCRIPT" --plan plan.md --upstream "$DEFAULT_UPSTREAMS" >/dev/null 2>&1
     actual=$?
     if [[ "$actual" == "$expected" ]]; then
       echo "PASS [$name] exit=$actual"
@@ -90,6 +89,13 @@ if [[ "$SELF_TEST" == "1" ]]; then
       return 1
     fi
   }
+
+  mkdir -p docs/models/process
+  cat > docs/models/process/no-aggregates.md <<'EOF_UP_NONE'
+<!-- anchor: Rel.Noop-Noop -->
+- No aggregate anchors; used by plan-internal self-tests.
+EOF_UP_NONE
+  DEFAULT_UPSTREAMS="docs/models/process/no-aggregates.md"
 
   # Case: clean plan passes
   run_case "clean plan (2 modules, disjoint aggregates, Rel-typed contracts)" 0 "# Plan
@@ -299,8 +305,23 @@ EOF_UP_PAY
 - **产出契约**：无" \
     "docs/models/domain/order.md,docs/models/domain/payment.md" || ((fails++))
 
-  # Case: without --upstream, missing-aggregate is NOT enforced (backwards compat)
-  run_case "without --upstream, Check 4 is skipped (plan-internal only)" 0 "# Plan
+  # Case: without --upstream, the script rejects the run instead of silently
+  # skipping aggregate coverage.
+  run_case_no_upstream() {
+    local name="$1" expected="$2" content="$3"
+    echo "$content" > plan.md
+    local actual
+    bash "$SELF_SCRIPT" --plan plan.md >/dev/null 2>&1
+    actual=$?
+    if [[ "$actual" == "$expected" ]]; then
+      echo "PASS [$name] exit=$actual"
+    else
+      echo "FAIL [$name] expected=$expected actual=$actual"
+      return 1
+    fi
+  }
+
+  run_case_no_upstream "missing --upstream is rejected" 1 "# Plan
 
 ## Module: order
 - **持有聚合**：Order (upstream-ref: docs/models/domain/order.md#Aggregate.Order)
@@ -345,6 +366,12 @@ fi
 
 if [[ ! -f "$PLAN" ]]; then
   echo "Error: plan file not found: $PLAN" >&2
+  exit 1
+fi
+
+if [[ -z "$UPSTREAMS" ]]; then
+  echo "Error: --upstream <path>,... is required for Epic plan structure checks" >&2
+  echo "Run with --help for usage" >&2
   exit 1
 fi
 
@@ -446,50 +473,48 @@ if [[ -n "$BAD_DEP" || -n "$BAD_OUT" ]]; then
     [[ -z "$ref" ]] && continue
     echo "  - [$kind] module [$mod]: $ref" >&2
   done
-  # Check 2 takes precedence over Check 1 only if Check 1 didn't already fail.
+  # Preserve earlier failures; Check 2 supplies the exit code only when no
+  # previous structural check has failed.
   [[ $fail -eq 0 ]] && fail=3
 fi
 
-# ── Check 4 (optional): every upstream Aggregate.* is held by some module ──
-# Only runs when --upstream is provided. Enumerates Aggregate.* anchors from
-# the listed modeling units and verifies each appears in some module's
-# "持有聚合" field of the plan.
-if [[ -n "$UPSTREAMS" ]]; then
-  IFS=',' read -ra UP_LIST <<< "$UPSTREAMS"
-  MISSING_AGG=""
-  for upstream in "${UP_LIST[@]}"; do
-    upstream=$(echo "$upstream" | tr -d ' ')
-    [[ -z "$upstream" ]] && continue
-    if [[ ! -f "$upstream" ]]; then
-      echo "Error: --upstream file not found: $upstream" >&2
-      exit 1
-    fi
-    # Validate the upstream path shape (reuse the scenario convention).
-    base=$(basename "$upstream")
-    scenario=$(basename "$(dirname "$upstream")")
-    if [[ ! "$base" =~ ^${UNIT_NAME_RE}\.md$ ]] || [[ ! "$scenario" =~ ^(${SCENARIO_ALT})$ ]]; then
-      echo "Error: --upstream must be a modeling unit path ending with <scenario>/<name>.md (got: $upstream)" >&2
-      exit 1
-    fi
-    # Extract Aggregate.* anchors declared in this upstream.
-    while IFS= read -r anchor; do
-      [[ -z "$anchor" ]] && continue
-      # anchor is like "Aggregate.Order" — construct the expected short ref
-      # using this upstream's scenario/name identity. Plans may use either
-      # full path or short path; match by ending "/scenario/name.md#anchor".
-      expected_suffix="${scenario}/${base}#${anchor}"
-      # Check every held-aggregate ref in AGG_FILE ends with this suffix.
-      if ! awk -F'\t' -v suf="$expected_suffix" '$2 ~ suf "$" { found=1; exit } END { exit !found }' "$AGG_FILE"; then
-        MISSING_AGG+="  - ${scenario}/${base}#${anchor} (declared in upstream but not held by any plan module)"$'\n'
-      fi
-    done < <(grep -oE '<!-- anchor: Aggregate\.[A-Za-z0-9._-]+ -->' "$upstream" 2>/dev/null | \
-             sed -E 's/<!-- anchor: //; s/ -->$//' | sort -u)
-  done
-  if [[ -n "$MISSING_AGG" ]]; then
-    echo "❌ Check 4 FAILED: upstream Aggregate(s) not held by any plan module (aggregate未落位)" >&2
-    printf "%s" "$MISSING_AGG" >&2
-    [[ $fail -eq 0 ]] && fail=5
+# ── Check 4: every upstream Aggregate.* is held by some module ───────────
+# Enumerates Aggregate.* anchors from the listed modeling units and verifies
+# each appears in some module's "持有聚合" field of the plan.
+IFS=',' read -ra UP_LIST <<< "$UPSTREAMS"
+MISSING_AGG=""
+for upstream in "${UP_LIST[@]}"; do
+  upstream=$(echo "$upstream" | tr -d ' ')
+  [[ -z "$upstream" ]] && continue
+  if [[ ! -f "$upstream" ]]; then
+    echo "Error: --upstream file not found: $upstream" >&2
+    exit 1
   fi
+  # Validate the upstream path shape (reuse the scenario convention).
+  base=$(basename "$upstream")
+  scenario=$(basename "$(dirname "$upstream")")
+  if [[ ! "$base" =~ ^${UNIT_NAME_RE}\.md$ ]] || [[ ! "$scenario" =~ ^(${SCENARIO_ALT})$ ]]; then
+    echo "Error: --upstream must be a modeling unit path ending with <scenario>/<name>.md (got: $upstream)" >&2
+    exit 1
+  fi
+  # Extract Aggregate.* anchors declared in this upstream.
+  while IFS= read -r anchor; do
+    [[ -z "$anchor" ]] && continue
+    # anchor is like "Aggregate.Order" — construct the expected short ref
+    # using this upstream's scenario/name identity. Plans may use either
+    # full path or short path; match by ending "/scenario/name.md#anchor".
+    expected_suffix="${scenario}/${base}#${anchor}"
+    # Check every held-aggregate ref in AGG_FILE ends with this suffix.
+    if ! awk -F'\t' -v suf="$expected_suffix" '$2 ~ suf "$" { found=1; exit } END { exit !found }' "$AGG_FILE"; then
+      MISSING_AGG+="  - ${scenario}/${base}#${anchor} (declared in upstream but not held by any plan module)"$'\n'
+    fi
+  done < <(grep -oE '<!-- anchor: Aggregate\.[A-Za-z0-9._-]+ -->' "$upstream" 2>/dev/null | \
+           sed -E 's/<!-- anchor: //; s/ -->$//' | sort -u)
+done
+if [[ -n "$MISSING_AGG" ]]; then
+  echo "❌ Check 4 FAILED: upstream Aggregate(s) not held by any plan module (aggregate未落位)" >&2
+  printf "%s" "$MISSING_AGG" >&2
+  [[ $fail -eq 0 ]] && fail=5
 fi
 
 if [[ $fail -ne 0 ]]; then

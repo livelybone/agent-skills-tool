@@ -1,220 +1,62 @@
-# 标准模式工作流
+# Standard 模式工作流
 
-标准模式下，`spec-driven-dev` 负责编排完整流程，但在关键 gate 处等待人工确认。各阶段的详细内容规则由对应 worker skill 定义；本文件只定义 orchestrator 的阶段顺序、输入输出、Review 触发规则和回退点。
+Standard 模式负责编排完整流程，但在关键 gate 处等待人工确认。通用阶段顺序、stage key、role、artifact 路径、StageResult / ReviewResults 配对规则由 `SKILL.md` 的 Stage Registry 和「编排契约」定义；本文件只记录 Standard 模式差异。
 
-Review 阶段的执行机制、角色、task-name、裁决规则与 `workflows/auto.md` 的「每个 Review 阶段的统一协议」完全一致；两种模式的**唯一差异**是：是否强制执行。
+## 模式语义
 
-每个 Review 阶段在该统一协议表中包含六项关键字段：`stage key / prompt / 被审查产物 / runner / task-name 规范 / 失败回退到`。本文件各步骤只补 `stage key / prompt / 失败回退 / 触发规则 / 跳过规则` 与 Standard 模式相关的部分，其余字段一律指向 auto.md 的统一协议表——**读者必须两份一起读**才能得到 Standard 模式下某 Review 阶段的完整执行规则。
+- Standard 不改变 13 步阶段顺序。
+- Standard 允许按 `guides/complexity.md` 合法跳过部分独立 Review runner。
+- Review Decision Gate 本身不可跳过；每个内容阶段完成后必须记录 `executed:<path>` 或 `skipped:<complexity + reason>`。
+- 关键人工 gate 必须把用户裁决写入 `DecisionLog`，并把可续接事实并入 `WorkflowCheckpoint.Context Summary`。
 
-- **Auto 模式**：每个 Review 阶段强制执行
-- **Standard 模式**：Review 阶段**是否执行**按 `guides/complexity.md` 的复杂度判断，允许跳过，跳过必须在 Decision Log 中留痕
+## 内容阶段执行协议
 
-## 13 步阶段序列
+内容阶段均遵循 `SKILL.md` 的 orchestration contract：Controller 写 `StageHandoff`，Stage Worker 产出 artifact + `StageResult`，Controller 读取二者判断 gate。
 
-```
-1.  Intake And Route
-2.  Clarify If Needed
-3.  Modeling
-4.  Modeling Review               ← 按 complexity.md 触发
-    (或 Modeling Exemption Review ← 走豁免时，条件强制)
-5.  Plan If Epic
-6.  Plan Review (Epic only)       ← Epic 强制，Medium/Complex 建议多轮
-7.  Tech Spec
-8.  Spec Review                   ← 按 complexity.md 触发
-9.  Test Design And Implementation
-10. Test Review                   ← 按 complexity.md 触发
-11. Feature Implementation
-12. Implementation Review         ← 按 complexity.md 触发
-13. Workflow Verification And Summary
-```
+Clarify If Needed 是例外：Controller 直接与用户交互。用户回答后，简单澄清由 Controller inline 产出 `ClarifiedRequirement` + `StageResult`；复杂澄清才写 `StageHandoff` 委派 `requirements-clarification` subagent 整理。
 
-每个阶段完成后都要：
+Inline 规则：Trivial 阶段可 inline，但必须满足三项留痕：Decision Log 写明 inline 原因、产出等价 `StageResult` 摘要、checkpoint 记录 artifact 与 stage result。Simple 阶段默认使用 Stage Worker；只有单问题澄清、无正式下游 artifact、且不会进入后续 worker 链路时才可 inline。Medium / Complex 阶段必须使用 Stage Worker；若宿主平台没有可用 subagent，只能作为降级路径，并在 Decision Log 记录原因。
 
-- 把本阶段新增的关键信息并入 `Context Summary`，更新并落盘 `WorkflowCheckpoint`
-- 记录当前 blockers / open questions 摘要
-- 明确下一个 worker（或 Review runner）和 handoff 输入
+## 人工 Gate Overlay
 
-Review 收敛后的 Checkpoint 更新规则与 `workflows/auto.md` 的「Review 收敛后的 Checkpoint 更新」节一致。Standard 模式下若某 Review 被合法跳过（complexity 档位允许），跳过事实在 Decision Log 留痕；上一 content 阶段的新增已在该 content 阶段完成时并入 Summary，跳过 Review 不影响续接基线。
+| 阶段 key | Standard 人工 gate | 失败回退 |
+|----------|--------------------|----------|
+| `clarification` | 确认 `Goal / Actors / Trigger / In Scope / Out of Scope / Acceptance Signals` 足以支持建模 | 澄清结果改变主路径语义时，后续建模草稿失效 |
+| `modeling` | 确认建模单元已就绪、未绕过 `modeling-first` 手编模型；若豁免，checkpoint 记录结构化 `modeling_exemption` | 模型缺项或聚合边界错误时，回到 `modeling-first` 并使下游 handoff 失效 |
+| `plan` | Epic 时确认模块边界、依赖顺序、契约落位合理 | plan 变更模块边界或契约时，下游 tech spec / test / implementation handoff 失效 |
+| `tech-spec` | 确认 TechnicalSpec 足以支持测试设计 | 需求语义问题回 clarification；模型缺口回 modeling；plan 边界问题回 plan |
+| `test-design-and-implementation` | 确认关键规则、主流程、危险边界都被转换成测试约束，且 worker 内部已做自查 | 测试阶段暴露 spec 语义缺口时，回到 tech spec |
+| `feature-implementation` | 确认交付与 scope 对齐，未偷偷扩写流程外语义 | spec / test / model 语义冲突时，回到最上游真实冲突点 |
 
-## 步骤 1 — Intake And Route
+## Review Decision Overlay
 
-- 判断需求是否模糊
-- 判断是否为 Epic
-- 判断当前 run 是 `standard` 还是 `auto`
-- 若关键输入缺失且无法安全继续，先进入澄清阶段
+Review stage 的 runner、task-name、prompt、失败回退和 checkpoint 更新规则见 `guides/review.md`。Standard 只额外允许按 `guides/complexity.md` 合法跳过部分独立 runner。
 
-## 步骤 2 — Clarify If Needed
+合法跳过时必须同时：
 
-- worker：`requirements-clarification`
-- 输入：原始需求、已知约束、现有上下文
-- 输出：`ClarifiedRequirement` 或显式 blocker
+- 在 Decision Log 写明 `跳过理由：<complexity 判定 + 具体理由>`。
+- 在 `WorkflowCheckpoint.Review Results` 写成 `<checkpoint-key>: skipped:<complexity 判定 + 具体理由>`。
+- 保持上一 content 阶段的 Context Summary 不丢失。
 
-人工 gate：
+## Workflow Verification
 
-- 确认 `Goal / Actors / Trigger / In Scope / Out of Scope / Acceptance Signals` 足以支持后续建模
+由 Controller 执行：
 
-回退：
-
-- 若澄清结果改变了主路径语义，后续建模草稿失效
-
-## 步骤 3 — Modeling
-
-- worker：`modeling-first`
-- 输入：原始需求或 `ClarifiedRequirement`
-- 输出：`docs/models/<scenario>/<name>.md`，或经批准的 `modeling_exemption`
-
-人工 gate：
-
-- 确认需要的建模单元都已就绪
-- 确认没有绕过 `modeling-first` 手编建模文件
-- 若走豁免：在 `WorkflowCheckpoint` 中记录结构化 `modeling_exemption`
-
-回退：
-
-- 若后续阶段发现模型缺项或聚合边界错误，回到此阶段修模并使下游 handoff 失效
-
-## 步骤 4 — Modeling Review
-
-- stage key：`modeling-review`
-- prompt：`prompts/upstream-review.md`
-- 执行协议：同 `workflows/auto.md` 的「每个 Review 阶段的统一协议」表
-- 触发规则：按 `guides/complexity.md` 的表格「步骤 4 Modeling Review」行
-- 失败回退：同 `workflows/auto.md` 步骤 4 的回退规则
-- 跳过规则：允许跳过的复杂度档位按 complexity.md；跳过时必须在 Decision Log 中留痕
-
-### 步骤 4' — Modeling Exemption Review（走豁免时条件强制）
-
-- stage key：`exemption-review`
-- prompt：`prompts/exemption-review.md`
-- 执行协议：同 `workflows/auto.md` 的「每个 Review 阶段的统一协议」表
-- 触发规则：按 `guides/complexity.md` 的表格「步骤 4' Modeling Exemption Review」行（任意复杂度均强制）
-- 失败回退：同 `workflows/auto.md` 步骤 4' 的回退规则
-
-## 步骤 5 — Plan If Epic
-
-- 仅 Epic 执行
-- 产物：`plan.md`
-- 机械校验：`scripts/check-plan-structure.sh` + `scripts/check-upstream-coverage.sh`
-
-人工 gate：
-
-- 确认模块边界、依赖顺序、契约落位合理
-
-回退：
-
-- 若 plan 变更了模块边界或契约，后续 tech spec / test / implementation handoff 需要重建
-
-## 步骤 6 — Plan Review（Epic 强制）
-
-- stage key：`plan-review`
-- prompt：`prompts/plan-review.md`
-- 执行协议：同 `workflows/auto.md` 的「每个 Review 阶段的统一协议」表
-- 触发规则：按 `guides/complexity.md` 的表格「步骤 6 Plan Review」行（Epic 任意复杂度均强制；Complex Epic 建议多轮，仍受 `multi-agent-loop` 3 轮上限约束）
-- 失败回退：同 `workflows/auto.md` 步骤 6 的回退规则
-
-## 步骤 7 — Tech Spec
-
-- worker：`tech-spec-writing`
-- 输入：requirement baseline + models（或已批准的 modeling exemption） + optional plan + optional review notes
-- 输出：`TechnicalSpec`
-
-人工 gate：
-
-- 确认该模块的 technical spec 足以支持测试设计
-
-回退：
-
-- 若发现 blocker 来自需求语义，回退到 clarification
-- 若发现 blocker 来自模型缺口，回退到 modeling
-- 若发现 blocker 来自 plan 边界，回退到 plan
-
-## 步骤 8 — Spec Review
-
-- stage key：`spec-review`
-- prompt：`prompts/spec-review.md`
-- 执行协议：同 `workflows/auto.md` 的「每个 Review 阶段的统一协议」表
-- 触发规则：按 `guides/complexity.md` 的表格「步骤 8 Spec Review」行
-- 失败回退：同 `workflows/auto.md` 步骤 8 的回退规则
-- 跳过规则：允许跳过的复杂度档位按 complexity.md；跳过时必须在 Decision Log 留痕
-
-## 步骤 9 — Test Design And Implementation
-
-- worker：`test-design-and-implementation`
-- 输入：批准后的 `TechnicalSpec`
-- 输出：场景稿 + 可执行测试 + Red Run 结果
-
-人工 gate：
-
-- 确认关键规则、主流程、危险边界都被转换成测试约束
-- worker 内部已做 `scenario-review` + `test-review` 两次自查
-
-回退：
-
-- 若测试阶段暴露 spec 语义缺口，回退到 tech spec
-
-## 步骤 10 — Test Review
-
-- stage key：`test-review`
-- prompt：`prompts/test-review.md`
-- 执行协议：同 `workflows/auto.md` 的「每个 Review 阶段的统一协议」表
-- 触发规则：按 `guides/complexity.md` 的表格「步骤 10 Test Review」行
-- 失败回退：同 `workflows/auto.md` 步骤 10 的回退规则
-- 跳过规则：允许跳过的复杂度档位按 complexity.md；跳过时必须在 Decision Log 留痕
-
-## 步骤 11 — Feature Implementation
-
-- worker：`feature-implementation-from-spec`
-- 输入：`TechnicalSpec` + `ExecutableTestSuite` + 相关模型约束
-- 输出：`DeliveredChange`
-
-人工 gate：
-
-- 确认当前交付与 scope 对齐，未偷偷扩写流程外语义
-
-回退：
-
-- 若实现阶段发现 spec / test / model 语义冲突，回退到最上游的真实冲突点
-
-## 步骤 12 — Implementation Review
-
-- stage key：`impl-review`
-- prompt：`prompts/impl-review.md`
-- 执行协议：同 `workflows/auto.md` 的「每个 Review 阶段的统一协议」表
-- 触发规则：按 `guides/complexity.md` 的表格「步骤 12 Implementation Review」行
-- 失败回退：同 `workflows/auto.md` 步骤 12 的回退规则
-- 跳过规则：允许跳过的复杂度档位按 complexity.md；跳过时必须在 Decision Log 留痕
-
-## 步骤 13 — Workflow Verification And Summary
-
-由 orchestrator 执行：
-
-1. 运行 `scripts/check-upstream-coverage.sh` 对最终 Upstream Coverage Matrix 做机械校验（多单元场景按 `guides/upstream-coverage.md` "Epic 多模块场景的调用方式" 分别执行）
-2. 汇总：
-   - 当前阶段是否已完成
-   - 每个 Review 阶段是否执行，若跳过则跳过理由
-   - 是否仍有 blockers / unfinished items / residual risks
-   - 下一次会话如何从 checkpoint 续接
+1. 运行 `$SPEC_DRIVEN_DEV_SKILL_DIR/scripts/check-upstream-coverage.sh` 对最终 Upstream Coverage Matrix 做机械校验（多单元场景按 `guides/upstream-coverage.md` 分别执行）。
+2. 运行 `$SPEC_DRIVEN_DEV_SKILL_DIR/scripts/check-review-results.sh --checkpoint <path>`，确认每个内容 stage（Clarification 除外）都有对应 `Review Results`。
+3. 汇总当前状态、Review 执行/跳过理由、blockers / unfinished items / residual risks，以及下一次会话如何从 checkpoint 续接。
 
 失败回退：
 
-- Matrix 校验 exit 2（虚假 upstream-ref 或 `<doc>#<anchor>` 不存在）→ 回退到产生非法引用的阶段（Spec/Test/Impl 均可能），由对应 worker 修复
-- Matrix 校验 exit 3（上游锚点未覆盖或 NOT APPLICABLE 理由缺失）→ 回退到 `feature-implementation-from-spec`，补齐覆盖行或追加有效 NOT APPLICABLE 理由
-- Matrix 校验 exit 4（矩阵 Spec/Test/Impl 位置失真：无效行号、无效后缀、无效 symbol）→ 回退到该位置所属阶段的 worker（Spec 列失真 → `tech-spec-writing`；Test 列失真 → `test-design-and-implementation`；Impl 列失真 → `feature-implementation-from-spec`），修复矩阵行或源文件
-- Matrix 校验 exit 5（matrix 文件 HTML 注释畸形）→ 由 orchestrator 修复 matrix 文件本身
+- Matrix exit 2 → 回到产生非法 upstream-ref 的阶段。
+- Matrix exit 3 → 回到 `feature-implementation-from-spec`，补齐覆盖行或追加有效 NOT APPLICABLE 理由。
+- Matrix exit 4 → 按位置失真所在列回到对应 worker（Spec / Test / Impl）。
+- Matrix exit 5 → Controller 修复 matrix 文件本身。
 
-标准模式的完成条件：
+## Decision Log 补充
 
-- 该 run 的 worker outputs 已按顺序产出
-- 每个应执行的 Review 阶段都有结论（执行或明确跳过）
-- Upstream Coverage Matrix 已产出并通过 `scripts/check-upstream-coverage.sh`
-- `WorkflowCheckpoint` 已更新到最终状态
-- 用户可以清楚知道 workflow 当前是 `done` 还是 `blocked`
+Decision Log 字段见 `templates/decision-log.md`。Standard 模式特有补充：
 
-## Decision Log 字段
-
-Standard 模式的 Decision Log 字段与 `workflows/auto.md` 的「Decision Log 字段」节**完全共用**。本文件不复述字段列表。
-
-Standard 模式特有补充（不在 auto.md 中定义的）：
-
-- `模式` 字段写 `standard`
-- **Review 阶段合法跳过时**，额外记一行 `跳过理由：<complexity 判定 + 具体理由>`，同时 `调用 worker / runner` 字段写 `skipped`，`结果` 字段写 `skipped`，`Context Summary 新增` 字段写 `无`
+- `模式` 字段写 `standard`。
+- Review 阶段合法跳过时，`调用 worker / runner` 字段写 `skipped`，`结果` 字段写 `skipped`，`Context Summary 新增` 字段写 `无`。
+- 所有人工 gate 的用户裁决必须记录；完成时用户应清楚 workflow 当前是 `done` 还是 `blocked`。

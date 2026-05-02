@@ -2,13 +2,13 @@
 
 你是一个独立的 Plan 审查员，需要审查 Epic 的模块拆解方案。
 
-**使用 agent 角色执行本任务**（不是 peer）。
+**使用 agent 角色执行本任务**；如需第二视角，由 controller 另起独立 task-name。
 
 ## 输入
 
 - Epic 涉及的所有建模单元（`docs/models/<scenario>/<name>.md` 清单）——必须提供，审查参照
 - Plan（`plan.md`）
-- 机械校验脚本的运行日志：`scripts/check-plan-structure.sh` + `scripts/check-upstream-coverage.sh`（两者均须已通过；若未运行请先驳回要求先跑脚本）
+- 机械校验脚本的运行日志：`$SPEC_DRIVEN_DEV_SKILL_DIR/scripts/check-plan-structure.sh` + `$SPEC_DRIVEN_DEV_SKILL_DIR/scripts/check-upstream-coverage.sh`（两者均须已通过；若未运行请先驳回要求先跑脚本）
 
 ## 输出
 
@@ -17,8 +17,8 @@
 逐条回答：
 
 1. **机械校验通过**：两条脚本都已通过？
-   - `scripts/check-plan-structure.sh --plan plan.md --upstream <Epic 涉及的所有 domain/*.md 以及包含 Aggregate.* 的其他单元>`（`--upstream` 在 Epic 场景是硬性；**注意语义**：必须传入"Epic 涉及的所有聚合来源单元"——包括**尚未被 Plan 引用**的那些，否则脚本无法发现"某聚合所在单元整个未被任何模块持有"的情况；缺失或不全都会放过"聚合未落位"）
-   - `scripts/check-upstream-coverage.sh`（覆盖 Plan 引用的所有建模单元——通常是 `domain/*.md`，涉及流程契约时还需覆盖 `process/*.md`；按 `modeling-first/references/cross-module.md` 权威：Rel 锚点位于引用方单元）
+   - `$SPEC_DRIVEN_DEV_SKILL_DIR/scripts/check-plan-structure.sh --plan plan.md --upstream <Epic 涉及的所有 domain/*.md 以及包含 Aggregate.* 的其他单元>`（`--upstream` 在 Epic 场景是硬性；**注意语义**：必须传入"Epic 涉及的所有聚合来源单元"——包括**尚未被 Plan 引用**的那些，否则脚本无法发现"某聚合所在单元整个未被任何模块持有"的情况；缺失或不全都会放过"聚合未落位"）
+   - `$SPEC_DRIVEN_DEV_SKILL_DIR/scripts/check-upstream-coverage.sh`（覆盖 Plan 引用的所有建模单元——通常是 `domain/*.md`，涉及流程契约时还需覆盖 `process/*.md`；按 `modeling-first/references/cross-module.md` 权威：Rel 锚点位于引用方单元）
    - 是 → 通过
    - 未跑或失败 → 标注 `[Critical][机械校验未通过]`，要求先跑脚本并修复
 2. **聚合边界完整性**：Epic 涉及的每个建模单元里的**每个** `Aggregate.*` 锚点是否有且仅有一个模块在"持有聚合"字段中承载？

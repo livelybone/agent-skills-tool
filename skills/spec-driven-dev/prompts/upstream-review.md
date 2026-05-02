@@ -2,7 +2,7 @@
 
 你是一个独立的建模审查员，需要审查刚由 `modeling-first`（v0.3+）产出的建模单元（`docs/models/<scenario>/<name>.md`）。
 
-**使用 agent 角色执行本任务**（不是 peer）——peer 角色用于对已有审查结论做第二视角挑战。
+**使用 agent 角色执行本任务**；如需第二视角，由 controller 另起独立 task-name。
 
 ## 输入
 
@@ -20,9 +20,9 @@
 1. **路径合规**：建模文件路径是否以 `<scenario>/<name>.md` 结尾？`<scenario>` 是否为 `domain` / `ui` / `components` / `process` / `state-machine` 之一？`<name>` 是否 kebab-case？
    - 是 → 通过
    - 否 → 标注 `[Critical][路径不合规]`——机械校验会直接拒绝此文件
-2. **锚点完整性**：建模文件中的每个条目是否都带 `<!-- anchor: <Namespace>.<Name> -->` 标记？**按当前 scenario 可用的命名空间清单**（权威清单在 `guides/upstream-ref.md`——不要在本提示中复述清单，直接对照该文件验证）逐条检查：
+2. **锚点完整性**：建模文件中的每个条目是否都带 `<!-- anchor: <Namespace>.<Name> -->` 标记？按 `modeling-first/references/anchors.md` 的 scenario 命名空间规则逐条检查。
    - 缺失 → 标注 `[Critical][锚点缺失]`，列出缺锚点的条目。机械校验会直接失败
-3. **锚点命名规范**：锚点是否符合 `guides/upstream-ref.md` 定义的形状（`[A-Z][A-Za-z0-9]*\.[A-Za-z0-9._-]+`）？命名空间是否适配当前 scenario（如 `Aggregate.*` 仅 `domain/` 允许）？具体 scenario × 命名空间矩阵见 `guides/upstream-ref.md`。
+3. **锚点命名规范**：锚点是否符合 `guides/upstream-ref.md` 定义的形状（`[A-Z][A-Za-z0-9]*\.[A-Za-z0-9._-]+`）？命名空间是否适配当前 scenario（权威矩阵见 `modeling-first/references/anchors.md`）？
    - 规范且适配 → 通过
    - 不规范或越界 → 标注 `[Major][命名不规范]` / `[Major][命名空间越界]`
 4. **锚点唯一性**：同一文档内有无重复锚点？
