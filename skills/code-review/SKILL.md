@@ -67,7 +67,19 @@ bash scripts/detect-clones.sh --scope=full --min-lines=3 --min-tokens=30
    - 参考 `references/review-guide.md` 中的模式 5、6
    - **建模对齐检查**：如果变更涉及领域实体/关系/不变量/派生关系，或对现有实体引入状态变化逻辑（与 `modeling-first` skill 触发条件一致），查找对应的 `model.md`（通常在 `docs/models/` 或 feature 目录）；若存在，确认实现未偏离模型；若不存在但本应存在，记录为 Major 并建议补建模。**注意**：若本次 review 是在 `spec-driven-dev` 流程的 CI 验证阶段（步骤 11.3）中被调用，跳过 ref 存在性验证（upstream coverage gate 已覆盖），但仍执行语义对齐验证（实现是否偏离 `model.md` 声明的实体/关系/不变量语义）
 
-4. **结构性问题扫描**（LLM 在阅读代码时顺带检查，无独立脚本）
+4. **抽象与边界**（模块层面：deep / shallow / seam）
+
+   模式 5/6 检查的是**单值/字段/参数层面**的冗余（一个 prop、一个派生值）。本步骤检查**模块层面**的抽象质量——同一组代码作为一个整体，是 deep 还是 shallow？seam 在挡什么真实变化？这是粒度互补，**不复述模式 5/6**，参考 `references/review-guide.md` 中的"抽象与边界"小节。
+
+   对每个新增/修改的模块（文件、类、函数族、wrapper 层），LLM 顺序回答三个问题：
+
+   - **Q1：这个模块是 deep 还是 shallow？** 接口复杂度 vs 内部复杂度。Deep = 接口窄、内部干很多事（如 Unix 文件 API）；Shallow = 接口和实现一样复杂，本质是 thin wrapper，不藏复杂度只增认知负担
+   - **Q2：删掉它，复杂度散到 N 个调用方，还是凭空消失？**（deletion test）散到调用方且每个都做几乎一样的事 → deep，保留；凭空消失，调用方不补任何东西 → shallow，删
+   - **Q3：这个 seam 在挡什么真实变化？**（seam justification）说不出真实变化理由 → 抽象债（为"将来可能"造的 seam）；有真实需要变化的理由 → 保留
+
+   标记为 HIGH（shallow wrapper 增加无价值认知负担 / seam 无 justification）或 MEDIUM（接口边界设计可优化）。**与建模对齐检查不冲突**：建模对齐看模型语义偏离，本步骤看模块抽象结构，同一模块两类问题分别报告。
+
+5. **结构性问题扫描**（LLM 在阅读代码时顺带检查，无独立脚本）
    - 文件/函数是否超长（文件 > 300 行，函数 > 50 行）
    - 嵌套是否过深（> 3 层）
    - 是否存在应该提升为共享模块的局部定义（被多文件以不同方式重复实现）

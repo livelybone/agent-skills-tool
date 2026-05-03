@@ -11,3 +11,4 @@ pnpm-debug.log*
 .code-review/
 .claude
 __pycache__/
+.spec-driven-dev

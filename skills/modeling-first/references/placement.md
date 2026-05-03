@@ -46,6 +46,8 @@ docs/models/
     └── onboarding-flow.md
 ```
 
+> 仓库根 `docs/models/INDEX.md` 是辅助导航文件（不持锚点，详见 `../SKILL.md` "跨 scenario 索引"小节）。
+
 ## 命名与路径规则
 
 - **文件名 = 建模单元名** `<name>.md`（如 `orders.md`、`membership-center.md`）。名称用 kebab-case，小写

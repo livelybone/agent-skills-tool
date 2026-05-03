@@ -147,6 +147,18 @@ metadata:
 
 > 📖 **详细规则见** `references/placement.md`：目录结构全貌、Source of Truth 完整表、通用 vs 业务共用组件、提升规则细节、漂移对齐步骤、多模块建模顺序
 
+### 跨 scenario 索引（`docs/models/INDEX.md`）
+
+仓库根 `docs/models/INDEX.md` 是**辅助导航文件**，手工维护、列出本仓库现有 `docs/models/<scenario>/<name>.md` 索引。
+
+**强约束**：
+
+- **不持锚点**：INDEX.md **不允许**含 `<!-- anchor: ... -->`；下游 skill 不得用 `upstream-ref: docs/models/INDEX.md#...` 引用本文件
+- **辅助导航，非 single source of truth**：项目全局视图仍通过"扫描 `docs/models/` 目录下所有建模文件"聚合得到——INDEX.md 仅是 navigation aid，**不替代**扫描机制
+- **维护节奏**：新增 model 文件时手工添加索引行；model 移除时手工删除。自动化生成机制是 v0.4 候选，本 Epic 不实现
+
+INDEX.md 骨架与示例见 `docs/models/INDEX.md` 自身。
+
 ## 执行步骤
 
 每一步"应该做什么"在本节，"怎么做"见对应的 `references/steps/` 文件（按需读取）。
@@ -267,6 +279,11 @@ metadata:
 - **Process Model** — 涉及多步操作/条件分支/回滚时填写
 - **Component Identification** — 模块涉及多页面/多视图时填写
 - **API Surface** — 当模型需要暴露给调用方时补充（伪代码形式）
+- **已知歧义**（Known Ambiguities） — **仅 `domain/` scenario 适用**；记录领域内尚未裁决的概念边界、命名冲突、归属未明等点；条目可被动 reference ADR（`resolved by ADR-NNNN`），但本 skill **不主动 poll** ADR 系统
+- **反约定**（Anti-Conventions） — **仅 `domain/` scenario 适用**；记录项目里**字面与通用约定相反**的命名/语义（如 `user.deleted` 实际表示封禁而非软删除），避免下游 LLM 按通用模式误解
+
+> **歧义/反约定 slot 的可选性**：这两节是 **domain scenario 内部 + 可选 slot**。建模文件即使不出现这两节也满足质量门槛——出现时遵循模板约定写法，不出现不视为模板违规。
+> **与 adr-recorder 时间语义互斥**：歧义条目可标 `resolved by ADR-NNNN` 进行被动引用，但本 skill 在执行步骤中**不读取**也**不轮询** ADR 系统；ADR 发布触发的 modeling-first 增量更新由编排调用方（如 `spec-driven-dev`）在 `AdrPublished` 后显式重新触发本 skill 完成。
 
 ## 质量门槛
 
@@ -333,6 +350,8 @@ metadata:
 > 跨模块的切分规划**可以**由调用方完成并传入清单；若调用方未切分，本 skill 在"多模块需求的处理"流程中产出切分提议并直接按提议推进，仅在有无法裁决的歧义时才请用户确认。
 
 ## 覆盖声明
+
+**v0.3.1**：domain scenario 模板新增 2 个可选 slot（"已知歧义""反约定"）；新增 `docs/models/INDEX.md` 跨 scenario 索引约定（辅助导航，不持锚点，手工维护起步，自动化生成是 v0.4 候选）。
 
 **v0.3.0**：重构建模单元定义为 `scenario × 业务模块`，产物路径改为 `docs/models/<scenario>/<name>.md`。解除 basename 固定为 `model.md` 的硬约束（下游编排 skill 如 `spec-driven-dev` 需同步适配）。Scenario 固定 5 个（domain/ui/components/process/state-machine），不允许扩展。
 

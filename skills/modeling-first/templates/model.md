@@ -292,3 +292,39 @@ Order.cancel() → Order | Error
 实际实现形态由项目技术栈决定（class / struct / trait / hook / REST API 等）。
 
 </details>
+
+<details>
+<summary>📎 (可选，仅 domain/) 已知歧义 — 领域内尚未裁决的概念边界/命名冲突/归属未明</summary>
+
+> 适用 scenario：**仅 `domain/`**（`ui/` / `components/` / `process/` / `state-machine/` 单元不出现本节）。
+> 与 ADR 关系：条目可被动 reference ADR（`resolved by ADR-NNNN`），但本 skill 不主动同步 ADR 状态；ADR 发布后由编排调用方触发 modeling-first 增量更新。
+
+**每条歧义带 `<!-- anchor: Ambiguity.<Subject>.<N> -->` 标记**（N 从 1 开始）。
+
+<!-- anchor: Ambiguity.Order.1 -->
+- **优惠券与订单关系是 1:1 还是 1:N？** — 涉及：`Entity.Order` `Entity.Coupon` — 当前裁决：暂按 1:1 处理 — 待裁决：resolved by ADR-NNNN（若提案进入 ADR）；否则保留至 Open Questions
+
+<!-- anchor: Ambiguity.Order.2 -->
+- **取消订单是软删除还是状态置 cancelled？** — 当前裁决：状态置 cancelled，记录不删除 — 升级理由：不可逆决策候选（若用户后续要求物理清理则升级 ADR）
+
+每个可选章节 ≤ 30 行。
+
+</details>
+
+<details>
+<summary>📎 (可选，仅 domain/) 反约定 — 项目里与通用约定相反的命名/语义</summary>
+
+> 适用 scenario：**仅 `domain/`**（其他 scenario 单元不出现本节）。
+> 目的：防下游 LLM 按通用模式误解项目语义。
+
+**每条反约定带 `<!-- anchor: AntiConvention.<Subject>.<N> -->` 标记**（N 从 1 开始）。
+
+<!-- anchor: AntiConvention.User.1 -->
+- **`user.deleted = true` 在本项目表示"封禁"，而非"软删除"** — 真正软删除字段：`user.archivedAt` — 来源：历史代码已实装，改名风险高 — 影响下游：任何 `WHERE deleted=true` 语义需先看本条
+
+<!-- anchor: AntiConvention.Order.1 -->
+- **`Order.status = 'completed'` 在本项目表示"已结算"，而非"已发货完成"** — "已发货完成"字段：`Order.shippedAt !== null && Order.deliveredAt !== null` — 历史原因：早期与财务系统对齐
+
+每个可选章节 ≤ 30 行。
+
+</details>

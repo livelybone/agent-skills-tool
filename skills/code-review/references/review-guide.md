@@ -114,6 +114,37 @@ UI 层：
 
 > **辅助检测提示**：若项目使用 TypeScript，建议配置 ESLint `no-unused-vars` 和 `@typescript-eslint/no-unnecessary-type-parameters` 等规则，可自动捕获部分"声明了但未使用"的冗余实体（模式 5 的子集）。
 
+### 抽象与边界（模块层面）
+
+模式 5/6 看**单值/字段/参数**——这一节看**模块整体**作为一个抽象的质量。粒度互补，分别报告，不合并不复述。
+
+**与模式 5/6 的粒度区别**：
+
+| 层面 | 看什么 | 例子 |
+|---|---|---|
+| 模式 5 | 单个 prop/参数/字段是否多余 | 组件接受 `borderRadius` 但调用方都传同一值 |
+| 模式 6 | 多个值之间是否有派生关系 | `height=40, borderRadius=20` → borderRadius 应派生 |
+| **抽象与边界** | 模块整体是 deep 还是 shallow，seam 是否有 justification | 一个 wrapper 文件包了一次 fetch，无新增逻辑 |
+
+**三个判断问题**（对每个新增/修改的模块顺序回答）：
+
+1. **Deep or shallow？** 接口窄、内部干很多事 → deep，保留；接口和实现一样复杂、本质是透传 → shallow，质疑
+2. **Deletion test**：删掉它，复杂度散到 N 个调用方还是凭空消失？散到调用方且每处都做几乎一样的事 → deep；凭空消失、调用方不补任何东西 → shallow
+3. **Seam justification**：这个边界在挡什么真实变化？说不出真实变化理由 → 拿掉（为"将来可能"造的 seam 是抽象债）
+
+**反模式信号**：
+
+- **Thin wrapper**：只调用一次 underlying API，无参数转换/错误处理/缓存/聚合等新增逻辑。例：`async function getUser(id) { return api.get('/users/'+id) }` 只被一处调用 → 直接调 `api.get` 即可
+- **接口和实现一样复杂**：包装函数参数列表 ≈ 内部调用的参数列表，调用方读 wrapper 与读底层 API 认知成本相同 → 无封装价值
+- **为"将来可能"预留的扩展点**：定义了 strategy interface / hook / plugin 槽，但只有一个实现且无明确多态需求 → 抽象债
+- **跨模块边界 seam 误用作模块内部分隔**：在同一职责单元内部硬切层（如组件内部用 props drilling 切出"逻辑层""视图层"），调用方被迫理解人造分层 → 合并
+
+**标记规则**：
+
+- shallow wrapper 增加无价值认知负担 → HIGH（删除建议）
+- seam 无 justification 但代码已分布广泛 → MEDIUM（重构建议 + trade-off 说明）
+- deep module 但接口可进一步收窄 → LOW（设计微调）
+
 ## Phase 3 重构建议规则
 
 ### 抽取位置决策
