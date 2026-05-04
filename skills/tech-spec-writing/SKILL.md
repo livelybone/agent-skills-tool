@@ -127,6 +127,30 @@ Golden examples：见 `references/golden-examples.md`
 5. 让阅读者回答：哪些问题阻塞下游，哪些只是遗留问题？
 6. 若 1-5 中任一回答为否，说明 `TechnicalSpec` 仍不够清晰
 
+## 反模式合集
+
+> 本节用 ✗/✓ 对照列出**使用本 skill 时**容易出错的方式。LLM 对反例敏感度高于正例——单纯说"应该 X"不如说"不要 Y，因为 Z"。
+
+✗ **Spec 中写实现代码 / 文件级步骤**
+为什么错：Spec 是"做什么 + 契约"，不是"怎么写代码"。混进实现 lock 死下游灵活性，实现不一定按这个写法。
+✓ 只写规则 / 接口 / 状态 / 非目标，把 how 留给 implementation 阶段。
+
+✗ **Non-Goals 缺失或一笔带过**
+为什么错：Non-Goals 是模块边界的安全带；缺了，下游测试设计和实现都会越界到隔壁模块的职责。
+✓ 明确写本模块不负责什么，特别是 plan 同期其他模块的职责。
+
+✗ **业务规则凭空补设，没有 source 追溯**
+为什么错：Spec 应该是 requirement / model / plan 的翻译，不是再创作。补设规则导致下游修了 spec 找不到对应原始约束，决策无 trail。
+✓ 每条 Rule 能追溯到 requirement baseline / model / plan 的具体来源；找不到来源时升级到 Blocking Questions。
+
+✗ **状态机隐含在文字描述里，没显式列 States / Transitions**
+为什么错：测试无法机械覆盖每个 transition，实现容易漏 case（特别是非法转换）。
+✓ 涉及状态变化必须显式列 `States` + `State Transitions`，每条 transition 标合法/非法。
+
+✗ **`Status: Blocked` 只写"信息不足"**
+为什么错：阻塞理由不具体 = 用户不知道补什么才能 unblock，循环往复。
+✓ Blocking Questions 写具体哪个边界 / 规则 / 契约缺失，给出 unblock 所需的最小输入。
+
 ## 不覆盖范围
 
 - 不负责需求澄清

@@ -103,7 +103,7 @@ Golden examples：见 `references/golden-examples.md`
 - [ ] `Trigger` 明确可见，不隐藏在 `Facts` 中
 - [ ] `Facts / Assumptions / Open Questions` 三类信息明确分栏
 - [ ] `Blocking Questions` 与非阻塞 `Open Questions` 明确区分
-- [ ] `Out of Scope` 明确写出本次不做的内容，防止范围膨胀
+- [ ] `Out of Scope` 至少 3 条，每条对应**真有可能跑偏的方向**（不是形式主义凑数）；In Scope 用户自己能想出来，Out of Scope 才是防越界的安全带
 - [ ] 若状态为 `Ready for downstream`，下游无需再靠猜测补全主路径语义
 
 ## 验证方式
@@ -116,6 +116,30 @@ Golden examples：见 `references/golden-examples.md`
 2. 让阅读者回答：是否知道本次明确不做什么？
 3. 让阅读者回答：是否知道还缺什么信息、这些缺口是否阻塞建模？
 4. 若 1-3 中任一回答为否，说明澄清产物仍不够清晰
+
+## 反模式合集
+
+> 本节用 ✗/✓ 对照列出**使用本 skill 时**容易出错的方式。LLM 对反例敏感度高于正例——单纯说"应该 X"不如说"不要 Y，因为 Z"。
+
+✗ **Open questions 自己拍 + "我倾向 X"**（如：`Q1: 是否要 fuzzy match? 我倾向不做。`）
+为什么错：引导式提问，用户容易"嗯，你看着办"附和，结果在错前提上推进。
+✓ 陈述疑问，等用户答；不带个人倾向。Open / Blocking 都按这条。
+
+✗ **Out of Scope 写一两条凑数 / 留空**
+为什么错：In Scope 用户自己能想出来，Out of Scope 才是防 AI 越界的安全带。空 = 没设防。
+✓ 至少 3 条，每条对应**真有可能跑偏的方向**（基于上下文实施者容易顺手做的事）。
+
+✗ **把 solution 写进 Goal**（如 `Goal: 加个 search bar`）
+为什么错："加个 search bar" 是 solution，"用户 30s 找不到旧文档" 才是 problem。Goal 写 solution，下游 spec 就被 lock 在某种实现上。
+✓ Goal 描述用户/业务问题，不掺技术方案。技术选型留给 tech-spec。
+
+✗ **Facts 和 Assumptions 混写**
+为什么错：下游分不清哪些是确认事实、哪些是为推进而暂定，会把假设当事实使用，错误前提扩散。
+✓ 严格分栏——Facts 必须有用户明确确认背书。
+
+✗ **Blocking 与非 Blocking Open Questions 不分**
+为什么错：下游不知道哪些必须解才能推进、哪些可以异步处理，会把所有 open 都当阻塞或都跳过。
+✓ 阻塞下游主路径的进 Blocking Questions，不阻塞的进 Open Questions。
 
 ## 不覆盖范围
 

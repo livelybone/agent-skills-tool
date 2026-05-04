@@ -30,5 +30,5 @@
 **Open Questions**:
 - `none`
 **Notes**:
-- `<short routing summary>`
+- `<short routing summary; facts only — no recommended approach / trade-off matrix / leading questions for the worker>`
 - `内容阶段 worker 必须作为 subagent / Task 加载 Target Worker skill，并返回 blockers；不得直接与用户交互，不得自行裁决 gate 是否推进。`

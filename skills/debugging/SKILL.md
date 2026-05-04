@@ -131,6 +131,30 @@ metadata:
 4. 让阅读者回答:回归测试落到了哪个文件?CI 是否能拾取?
 5. 让阅读者回答:本次诊断有没有越界写入 ADR/模型/code-review 产物?
 
+## 反模式合集
+
+> 本节用 ✗/✓ 对照列出**使用本 skill 时**容易出错的方式。LLM 对反例敏感度高于正例——单纯说"应该 X"不如说"不要 Y，因为 Z"。
+
+✗ **跳过 reproduce 直接 fix**（"看错误信息感觉知道哪里坏，直接改"）
+为什么错：没有稳定 repro 就 fix，无法区分"修了根因"vs"改了无关代码碰巧让现象消失"。
+✓ 必须先有稳定 repro（< 30s, > 90% 命中），再进 hypothesise。承载 `Invariant.DebuggingSkill.2`。
+
+✗ **凭印象选一个根因假设直接 instrument**
+为什么错：单假设没有"被证伪策略"，instrument 即使观测到任何东西都没有 differential 能力（不知道是确认还是巧合）。
+✓ 列 ≤ 3 候选假设，每条显式标"如何被 repro 区分/证伪"。
+
+✗ **fix 后没重跑 repro 就 commit**
+为什么错："我看代码改对了"不是验证。修复路径上还可能有别的失败模式残留。
+✓ 修复前 repro fail → 修复后 repro pass，是步骤 4 的 gate（差分必须可被外部验证）。
+
+✗ **不落回归测试，只在 decision-log 记"已修"**
+为什么错：下次同类 bug 再出现时无法机械 catch，等于没修过。
+✓ 步骤 5 强制——repro.sh 升级成长期回归测试，或保留 `.sh` 作为最低承载。
+
+✗ **越界写 ADR / 模型 / code-review 产物**
+为什么错：本 skill 是运行时事后诊断，不是建模/设计/审查。混淆边界后下次维护找不到对应文件。
+✓ 只写 `.debug/<bug-id>/` 与项目测试目录；ADR 升级判断由用户决定（承载 `Invariant.Process.cross.2/3`）。
+
 ## 不覆盖范围
 
 - 不替代 **thinking-guardrails**(编码前置思维守卫,常驻指令文件)— 本 skill 仅在"运行时已观察到异常"后启动,**不是**写代码前的检查清单(承载 `Invariant.Process.cross.4`)

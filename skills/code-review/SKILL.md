@@ -172,6 +172,30 @@ bash scripts/detect-clones.sh --scope=full --min-lines=3 --min-tokens=30
 3. 抽查 2-3 个"意图级重复"，确认 LLM 判断合理
 4. 确认 action items 可直接执行（有文件路径、行号、建议的抽取位置）
 
+## 反模式合集
+
+> 本节用 ✗/✓ 对照列出**使用本 skill 时**容易出错的方式。LLM 对反例敏感度高于正例——单纯说"应该 X"不如说"不要 Y，因为 Z"。
+
+✗ **跳过 Phase 1 直接 LLM 读代码做 review**
+为什么错：jscpd 抓的文本级克隆 LLM 边读边数容易漏（尤其是大量小重复）。结构化数据先收集再判断更稳。
+✓ 先跑 `detect-clones.sh`，再以 JSON 报告为 LLM 精筛起点。
+
+✗ **建议写成"需要优化" 不带文件路径行号**
+为什么错：Action item 不可执行 = 等同没写，下游无法跟进。
+✓ 每条带 `path:line` + 具体改动方向（抽到哪个模块、合并到哪个函数、删除哪个 wrapper）。
+
+✗ **所有问题都标 HIGH**
+为什么错：没有优先级 = 没有优先级，用户不知道先改哪个，结果一个不改。
+✓ 按"修复成本 vs 风险"排，HIGH 控制在 ≤ 3 项；其余分流到 MEDIUM/LOW。
+
+✗ **把 OWASP 漏洞 / 性能瓶颈塞进 review 报告**
+为什么错：本 skill 不覆盖这些（见"不覆盖范围"），让用户误以为已覆盖会漏检真正的安全审查。
+✓ 发现这类问题，在 Action items 里标记"建议另起 security-review / profiling"，不冒充自己已审。
+
+✗ **审完不写 `review-report.md`，只口头说几条**
+为什么错：失去 trail，下次重审无法对照"上次哪些问题没修"。
+✓ 始终输出到 `.code-review/review-report.md`，即使只发现 1-2 个问题。
+
 ## 不覆盖范围
 
 - 不负责执行重构（只输出建议，人决定改哪些）
