@@ -8,6 +8,8 @@
 
 **Run Mode**: `<standard | auto>`
 `Run Mode` 必须填写为 `standard` 或 `auto`；检查脚本会拒绝占位符。
+**Review Skip Policy**: `<never | complexity-allowed>`
+`Review Skip Policy` 在 Intake 阶段确认并写入。`never` 是默认值，表示所有 Review Results 必须是 `executed`；`complexity-allowed` 仅在 Standard 模式下允许按复杂度合法记录 `skipped`。检查脚本会把缺失字段按 `never` 处理。
 **Scope**: `<single-module | epic>`
 **Epic Parallel Strategy** (Epic only): `<serial | multi-session | N/A>`
 **Current Stage**: `<intake | clarification | modeling | modeling-review | exemption-review | plan | plan-review | tech-spec | spec-review | test-design-and-implementation | test-review | feature-implementation | impl-review | verification | epic-summary>`
@@ -34,7 +36,7 @@
 - `<checkpoint-key>`: `<stage-result path>`
 **Review Results**:
 - `<checkpoint-key>`: executed:.agent-loop/<task-name>/r<N>/agent-judgment.md
-- `<checkpoint-key>`: skipped:<complexity + reason>
+- `<checkpoint-key>`: skipped:<complexity + reason>（仅 `Run Mode = standard` 且 `Review Skip Policy = complexity-allowed`）
 
 `<checkpoint-key>` is `<module>/<stage-key>` from `SKILL.md` Stage Registry, for example `single/modeling`, `_workflow/plan`, or `payment/tech-spec`. Use the same key as the matching Stage Results entry. Clarification is exempt from independent Review. Review task names use `<review-stage>-<module>`, for example `spec-review-single`, `plan-review-_workflow`, or `impl-review-payment`.
 **Context Summary** (跨阶段累积摘要；下一会话冷启动的单一续接基线；每个阶段完成时把本阶段新增的关键信息并入此处):

@@ -44,8 +44,10 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case() {
     local name="$1" expected="$2" content="$3" actual
     echo "$content" > checkpoint.md
+    set +e
     bash "$SELF_SCRIPT" --checkpoint checkpoint.md >/dev/null 2>&1
     actual=$?
+    set -e
     if [[ "$actual" == "$expected" ]]; then
       echo "PASS [$name] exit=$actual"
     else
@@ -57,6 +59,7 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "all reviewed" 0 "# Workflow Checkpoint
 
 **Run Mode**: standard
+**Review Skip Policy**: never
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -64,14 +67,71 @@ if [[ "$SELF_TEST" == "1" ]]; then
 
 **Review Results**:
 - \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
-- \`orders/tech-spec\`: skipped:Simple + user accepted manual review
+- \`orders/tech-spec\`: executed:.agent-loop/spec-review-orders/r1/agent-judgment.md
 
 **Context Summary**:
 - done" || ((fails++))
 
+  run_case "standard complexity skip allowed" 0 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Review Skip Policy**: complexity-allowed
+
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: skipped:Simple + user accepted manual review
+
+**Context Summary**:
+- done" || ((fails++))
+
+  run_case "standard never rejects skipped review" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Review Skip Policy**: never
+
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: skipped:Simple + user accepted manual review
+
+**Context Summary**:
+- blocked" || ((fails++))
+
+  run_case "duplicate review key rejected" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Review Skip Policy**: never
+
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
+- \`single/modeling\`: skipped:Simple + duplicate should be rejected
+
+**Context Summary**:
+- blocked" || ((fails++))
+
+  run_case "missing review skip policy defaults to never" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: skipped:Simple + user accepted manual review
+
+**Context Summary**:
+- blocked" || ((fails++))
+
   run_case "clarification exempt" 0 "# Workflow Checkpoint
 
 **Run Mode**: standard
+**Review Skip Policy**: never
 
 **Stage Results**:
 - \`single/clarification\`: .spec-driven-dev/single/single/clarification/stage-result.md
@@ -86,6 +146,7 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "missing review" 2 "# Workflow Checkpoint
 
 **Run Mode**: standard
+**Review Skip Policy**: never
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -99,6 +160,7 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "malformed review value" 3 "# Workflow Checkpoint
 
 **Run Mode**: standard
+**Review Skip Policy**: never
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -112,6 +174,7 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "missing stage results section" 2 "# Workflow Checkpoint
 
 **Run Mode**: standard
+**Review Skip Policy**: never
 
 **Review Results**:
 - \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
@@ -122,6 +185,7 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "auto mode rejects skipped review" 3 "# Workflow Checkpoint
 
 **Run Mode**: auto
+**Review Skip Policy**: complexity-allowed
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
 
@@ -134,6 +198,7 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "invalid run mode rejected" 3 "# Workflow Checkpoint
 
 **Run Mode**: <standard | auto>
+**Review Skip Policy**: never
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
 
@@ -146,12 +211,41 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "epic requires plan review" 2 "# Workflow Checkpoint
 
 **Run Mode**: standard
+**Review Skip Policy**: complexity-allowed
 **Scope**: epic
 **Stage Results**:
 - \`_workflow/plan\`: .spec-driven-dev/my-epic/_workflow/plan/stage-result.md
 
 **Review Results**:
 - \`_workflow/modeling\`: executed:.agent-loop/modeling-review-_workflow/r1/agent-judgment.md
+
+**Context Summary**:
+- blocked" || ((fails++))
+
+  run_case "epic plan review cannot be skipped" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Review Skip Policy**: complexity-allowed
+**Scope**: epic
+
+**Stage Results**:
+- \`_workflow/plan\`: .spec-driven-dev/my-epic/_workflow/plan/stage-result.md
+
+**Review Results**:
+- \`_workflow/plan\`: skipped:Simple + plan review is mandatory
+
+**Context Summary**:
+- blocked" || ((fails++))
+
+  run_case "invalid review skip policy rejected" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Review Skip Policy**: <never | complexity-allowed>
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
 
 **Context Summary**:
 - blocked" || ((fails++))
@@ -180,6 +274,7 @@ extract_keys() {
 stage_keys=$(extract_section "**Stage Results**:" | extract_keys || true)
 review_lines=$(extract_section "**Review Results**:" | grep -E '^- `[^`]+`:' || true)
 run_mode=$(grep -E '^\*\*Run Mode\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Run Mode\*\*:[[:space:]]*//' || true)
+review_skip_policy=$(grep -E '^\*\*Review Skip Policy\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Review Skip Policy\*\*:[[:space:]]*//' || true)
 scope=$(grep -E '^\*\*Scope\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Scope\*\*:[[:space:]]*//' || true)
 
 case "$run_mode" in
@@ -187,6 +282,15 @@ case "$run_mode" in
   auto|Auto|AUTO) run_mode="auto" ;;
   *)
     echo "Invalid or missing Run Mode in checkpoint" >&2
+    exit 3
+    ;;
+esac
+
+case "$review_skip_policy" in
+  ""|never|Never|NEVER) review_skip_policy="never" ;;
+  complexity-allowed|complexity_allowed|Complexity-Allowed|COMPLEXITY-ALLOWED) review_skip_policy="complexity-allowed" ;;
+  *)
+    echo "Invalid Review Skip Policy in checkpoint" >&2
     exit 3
     ;;
 esac
@@ -215,17 +319,36 @@ while IFS= read -r key; do
     continue
   fi
 
-  line=$(printf '%s\n' "$review_lines" | grep -E "^- \`${key}\`:" || true)
-  if [[ -z "$line" ]]; then
+  matching_lines=$(printf '%s\n' "$review_lines" |
+    sed -n -E 's/^- `([^`]+)`:.*$/\1	&/p' |
+    while IFS=$'\t' read -r review_key review_line; do
+      if [[ "$review_key" == "$key" ]]; then
+        printf '%s\n' "$review_line"
+      fi
+    done)
+  if [[ -z "$matching_lines" ]]; then
     echo "Missing Review Results entry for Stage Results key: $key" >&2
     exit 2
   fi
+  if [[ "$(printf '%s\n' "$matching_lines" | wc -l | tr -d '[:space:]')" != "1" ]]; then
+    echo "Duplicate Review Results entries for key: $key" >&2
+    exit 3
+  fi
+  line="$matching_lines"
   if [[ ! "$line" =~ ^-\ \`[^\`]+\`:\ (executed:[^[:space:]]|skipped:[^[:space:]]) ]]; then
     echo "Malformed Review Results entry for key: $key" >&2
     exit 3
   fi
   if [[ "$run_mode" == "auto" && "$line" =~ ^-\ \`[^\`]+\`:\ skipped: ]]; then
     echo "Auto mode cannot skip Review Results entry for key: $key" >&2
+    exit 3
+  fi
+  if [[ "$review_skip_policy" == "never" && "$line" =~ ^-\ \`[^\`]+\`:\ skipped: ]]; then
+    echo "Review Skip Policy 'never' cannot skip Review Results entry for key: $key" >&2
+    exit 3
+  fi
+  if [[ "$scope" == "epic" && "$key" == */plan && "$line" =~ ^-\ \`[^\`]+\`:\ skipped: ]]; then
+    echo "Epic Plan Review cannot be skipped for key: $key" >&2
     exit 3
   fi
 done <<< "$stage_keys"

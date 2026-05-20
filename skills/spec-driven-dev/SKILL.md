@@ -35,12 +35,13 @@ metadata:
 ## How
 
 1. 识别运行模式：Standard、Auto 或 Epic。
-2. Controller 按需澄清；复杂澄清在用户输入齐后可委派 `requirements-clarification`。
-3. 调用 `modeling-first`，或走已批准的 modeling exemption。
-4. 为内容阶段写 `StageHandoff`，通过宿主 subagent / Task 启动对应 Stage Worker。
-5. 收集 `StageResult`，更新 `WorkflowCheckpoint` 和 `DecisionLog`。
-6. 对完成的内容阶段执行或记录 Review Decision。
-7. gate 通过后进入下一阶段；最终运行机械校验并输出 summary。
+2. 在 Intake 阶段确认本次 workflow 的 `Review Skip Policy`，并写入 checkpoint。
+3. Controller 按需澄清；复杂澄清在用户输入齐后可委派 `requirements-clarification`。
+4. 调用 `modeling-first`，或走已批准的 modeling exemption。
+5. 为内容阶段写 `StageHandoff`，通过宿主 subagent / Task 启动对应 Stage Worker。
+6. 收集 `StageResult`，更新 `WorkflowCheckpoint` 和 `DecisionLog`。
+7. 对完成的内容阶段执行或记录 Review Decision。
+8. gate 通过后进入下一阶段；最终运行机械校验并输出 summary。
 
 ## 架构设计
 
@@ -71,6 +72,13 @@ metadata:
 ## 工作流程
 
 ### 入口路由
+
+Controller 在 Intake 阶段必须确立本次 workflow 的 Review stage 是否可以跳过，并把选择写入 `WorkflowCheckpoint.Review Skip Policy`：
+
+- `never`：默认值。所有 Review Results 必须是 `executed:<review-result-path>`；若无法执行 Review，workflow 停在 `blocked:<reason>` 或升级给用户，不得记录 `skipped`。
+- `complexity-allowed`：仅 Standard 模式允许。可按 `guides/complexity.md` 记录合法的 `skipped:<complexity + reason>`。
+
+Standard 模式下，Controller 必须询问用户是否允许按复杂度跳过 Review；若用户没有明确回答，默认使用 `never`。Auto 模式不等待该人工选择，直接写入 `never`；即使 checkpoint 写了其它值也不得跳过 Review。
 
 | 条件 | 路由 |
 |------|------|
@@ -124,9 +132,9 @@ Review artifact 仍由 `multi-agent-loop` 写入 `.agent-loop/<task-name>/r<N>/a
 ### 审查契约
 
 - `executed:<review-result-path>`：按 `guides/review.md` 启动 `multi-agent-loop`，加载对应 review prompt，并完成 controller judgment。
-- `skipped:<complexity + reason>`：仅 Standard 模式允许，且必须符合 `guides/complexity.md`。
+- `skipped:<complexity + reason>`：仅 Standard 模式且 `Review Skip Policy = complexity-allowed` 时允许，并且必须符合 `guides/complexity.md`。
 
-Auto 模式下 Review Decision 只能是 `executed`。Clarification 阶段不设独立 Review。
+`Review Skip Policy = never` 或 Auto 模式下，Review Decision 只能是 `executed`。Clarification 阶段不设独立 Review。
 
 非法状态：`StageResult.Status = done` 后，`Next Action` 不得直接指向下一 content worker；必须先完成 Review Decision 并更新 `WorkflowCheckpoint.Review Results`。
 
