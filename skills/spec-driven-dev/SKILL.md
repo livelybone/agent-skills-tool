@@ -78,7 +78,7 @@ Controller 在 Intake 阶段必须确立两项执行权限，并写入 `Workflow
 - `Worker Execution Policy`：`subagent-allowed` 或 `controller-only`。前者允许 Controller 通过宿主 subagent / Task 启动内容阶段 worker；后者禁止启动内容阶段 subagent，Controller 只能在对应 workflow 明确允许 inline 的场景内执行，否则必须停为 `blocked:<reason>` 或升级给用户。
 - `Review Runner Policy`：`cross-agent-allowed` 或 `manual-only`。前者允许 Review stage 通过 `multi-agent-loop` 启动跨 agent runner；后者禁止跨 agent Review runner，只有 Standard 模式中符合 `guides/complexity.md` 的人工审查跳过才可记录 `skipped:<complexity + reason>`。
 
-Standard 模式下，Controller 必须询问用户这两项权限；用户未明确回答时分别按 `controller-only` 和 `manual-only` 处理。Auto 模式不等待普通人工 gate，但必须已有明确授权才能写入 `subagent-allowed` / `cross-agent-allowed` 并自动推进；缺少任一授权时停为 blocker，不得把无授权改写成 `skipped` 或 inline 降级。
+Standard 模式下，Controller 必须询问用户这两项权限；用户未明确回答时分别按 `controller-only` 和 `manual-only` 处理。Auto 模式默认推荐使用 subagent worker 与 cross-agent review runner，但推荐不等于授权。只有当前用户消息或项目级 `AGENTS.md` 明确授权 subagent / delegation / parallel agent work / cross-agent review 时，Controller 才能写入 `subagent-allowed` / `cross-agent-allowed` 并自动推进；缺少任一授权时停为 `blocked:missing-subagent-or-cross-agent-authorization`，不得把无授权改写成 `skipped` 或 inline 降级。
 
 | 条件 | 路由 |
 |------|------|

@@ -8,10 +8,14 @@
 
 **Run Mode**: `<standard | auto>`
 `Run Mode` 必须填写为 `standard` 或 `auto`；检查脚本会拒绝占位符。
+**Worker Execution Recommendation**: `<subagent-recommended | controller-only-recommended>`
+`Worker Execution Recommendation` 记录 Auto/Standard 的默认建议，不表示授权；Auto 默认 `subagent-recommended`。
 **Worker Execution Policy**: `<subagent-allowed | controller-only>`
-`Worker Execution Policy` 在 Intake 阶段确认并写入；检查脚本会拒绝缺失或占位符。
+`Worker Execution Policy` 在 Intake 阶段确认并写入；`subagent-allowed` 必须来自当前用户消息或项目级 `AGENTS.md` 对 subagent / delegation / parallel agent work 的明确授权。检查脚本会拒绝缺失或占位符。
+**Review Runner Recommendation**: `<cross-agent-recommended | manual-only-recommended>`
+`Review Runner Recommendation` 记录 Auto/Standard 的默认建议，不表示授权；Auto 默认 `cross-agent-recommended`。
 **Review Runner Policy**: `<cross-agent-allowed | manual-only>`
-`Review Runner Policy` 在 Intake 阶段确认并写入；`cross-agent-allowed` 允许 `executed:` Review Results，`manual-only` 禁止跨 agent Review runner。检查脚本会拒绝缺失或占位符。
+`Review Runner Policy` 在 Intake 阶段确认并写入；`cross-agent-allowed` 必须来自当前用户消息或项目级 `AGENTS.md` 对 cross-agent review / parallel agent work 的明确授权，并允许 `executed:` Review Results；`manual-only` 禁止跨 agent Review runner。检查脚本会拒绝缺失或占位符。
 **Scope**: `<single-module | epic>`
 **Epic Parallel Strategy** (Epic only): `<serial | multi-session | N/A>`
 **Current Stage**: `<intake | clarification | modeling | modeling-review | exemption-review | plan | plan-review | tech-spec | spec-review | test-design-and-implementation | test-review | feature-implementation | impl-review | verification | epic-summary>`

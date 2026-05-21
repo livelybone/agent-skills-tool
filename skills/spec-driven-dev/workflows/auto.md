@@ -5,7 +5,9 @@ Auto 模式是 `spec-driven-dev` 的自动编排模式。通用阶段顺序、st
 ## 核心语义
 
 - `--auto` 表示自动推进模式，不等待普通人工 gate。
-- Auto 模式要求 `Worker Execution Policy = subagent-allowed` 且 `Review Runner Policy = cross-agent-allowed`；缺少任一明确授权时停为 blocker，不得自动降级。
+- Auto 模式默认推荐 subagent worker 与 cross-agent review runner；Recommendation 不等于 Authorization。
+- 只有当前用户消息或项目级 `AGENTS.md` 明确授权 subagent / delegation / parallel agent work / cross-agent review 时，Auto 才能写入 `Worker Execution Policy = subagent-allowed` 与 `Review Runner Policy = cross-agent-allowed`。
+- Auto 模式要求最终 Policy 为 `subagent-allowed` 与 `cross-agent-allowed`；缺少任一授权时停为 `blocked:missing-subagent-or-cross-agent-authorization`，不得自动降级。
 - 非 Epic 场景跳过 `plan` / `plan-review`，其余阶段按 Stage Registry 执行。
 - Epic 场景按 `workflows/epic.md` 在模块维度重复步骤 7-12。
 - 每个内容阶段后面紧跟强制 Review 阶段；Auto 模式下 Review Decision 只能是 `executed`。
