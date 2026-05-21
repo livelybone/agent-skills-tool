@@ -8,6 +8,7 @@
 **Stage**: `<clarification | modeling | tech-spec | test-design-and-implementation | feature-implementation>`
 **Checkpoint Key**: `<module>/<stage-key>`
 **Execution Mode**: `<stage-worker | inline>`
+**Worker Execution Policy**: `<subagent-allowed | controller-only>`
 **Source Artifacts**:
 - `<path-or-summary-1>`
 - `<path-or-summary-2>`
@@ -31,4 +32,5 @@
 - `none`
 **Notes**:
 - `<short routing summary; facts only — no recommended approach / trade-off matrix / leading questions for the worker>`
-- `内容阶段 worker 必须作为 subagent / Task 加载 Target Worker skill，并返回 blockers；不得直接与用户交互，不得自行裁决 gate 是否推进。`
+- `Worker Execution Policy = subagent-allowed` 时，内容阶段 worker 必须作为 subagent / Task 加载 Target Worker skill，并返回 blockers；不得直接与用户交互，不得自行裁决 gate 是否推进。`
+- `Worker Execution Policy = controller-only` 时，只有 workflow 明确允许 inline 的阶段才可继续；否则必须回到 checkpoint 记录 blocker。`

@@ -59,7 +59,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "all reviewed" 0 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: never
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -75,7 +76,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "standard complexity skip allowed" 0 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: complexity-allowed
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -86,16 +88,32 @@ if [[ "$SELF_TEST" == "1" ]]; then
 **Context Summary**:
 - done" || ((fails++))
 
-  run_case "standard never rejects skipped review" 3 "# Workflow Checkpoint
+  run_case "standard manual-only skip allowed" 0 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: never
+**Worker Execution Policy**: controller-only
+**Review Runner Policy**: manual-only
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
 
 **Review Results**:
-- \`single/modeling\`: skipped:Simple + user accepted manual review
+- \`single/modeling\`: skipped:Simple + user accepted manual review without cross-agent runner
+
+**Context Summary**:
+- done" || ((fails++))
+
+  run_case "manual-only rejects executed review" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Worker Execution Policy**: controller-only
+**Review Runner Policy**: manual-only
+
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
 
 **Context Summary**:
 - blocked" || ((fails++))
@@ -103,7 +121,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "duplicate review key rejected" 3 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: never
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -115,15 +134,30 @@ if [[ "$SELF_TEST" == "1" ]]; then
 **Context Summary**:
 - blocked" || ((fails++))
 
-  run_case "missing review skip policy defaults to never" 3 "# Workflow Checkpoint
+  run_case "missing worker policy rejected" 3 "# Workflow Checkpoint
 
 **Run Mode**: standard
+**Review Runner Policy**: cross-agent-allowed
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
 
 **Review Results**:
-- \`single/modeling\`: skipped:Simple + user accepted manual review
+- \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
+
+**Context Summary**:
+- blocked" || ((fails++))
+
+  run_case "missing review runner policy rejected" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Worker Execution Policy**: subagent-allowed
+
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
 
 **Context Summary**:
 - blocked" || ((fails++))
@@ -131,7 +165,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "clarification exempt" 0 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: never
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 
 **Stage Results**:
 - \`single/clarification\`: .spec-driven-dev/single/single/clarification/stage-result.md
@@ -146,7 +181,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "missing review" 2 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: never
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -160,7 +196,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "malformed review value" 3 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: never
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
@@ -174,7 +211,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "missing stage results section" 2 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: never
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 
 **Review Results**:
 - \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
@@ -185,7 +223,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "auto mode rejects skipped review" 3 "# Workflow Checkpoint
 
 **Run Mode**: auto
-**Review Skip Policy**: complexity-allowed
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
 
@@ -195,10 +234,38 @@ if [[ "$SELF_TEST" == "1" ]]; then
 **Context Summary**:
 - blocked" || ((fails++))
 
+  run_case "auto mode requires subagent worker policy" 3 "# Workflow Checkpoint
+
+**Run Mode**: auto
+**Worker Execution Policy**: controller-only
+**Review Runner Policy**: cross-agent-allowed
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
+
+**Context Summary**:
+- blocked" || ((fails++))
+
+  run_case "auto mode requires cross-agent review policy" 3 "# Workflow Checkpoint
+
+**Run Mode**: auto
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: manual-only
+**Stage Results**:
+- \`single/clarification\`: .spec-driven-dev/single/single/clarification/stage-result.md
+
+**Review Results**:
+
+**Context Summary**:
+- blocked" || ((fails++))
+
   run_case "invalid run mode rejected" 3 "# Workflow Checkpoint
 
 **Run Mode**: <standard | auto>
-**Review Skip Policy**: never
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
 
@@ -211,7 +278,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "epic requires plan review" 2 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: complexity-allowed
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 **Scope**: epic
 **Stage Results**:
 - \`_workflow/plan\`: .spec-driven-dev/my-epic/_workflow/plan/stage-result.md
@@ -225,7 +293,8 @@ if [[ "$SELF_TEST" == "1" ]]; then
   run_case "epic plan review cannot be skipped" 3 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: complexity-allowed
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: cross-agent-allowed
 **Scope**: epic
 
 **Stage Results**:
@@ -237,10 +306,25 @@ if [[ "$SELF_TEST" == "1" ]]; then
 **Context Summary**:
 - blocked" || ((fails++))
 
-  run_case "invalid review skip policy rejected" 3 "# Workflow Checkpoint
+  run_case "invalid worker policy rejected" 3 "# Workflow Checkpoint
 
 **Run Mode**: standard
-**Review Skip Policy**: <never | complexity-allowed>
+**Worker Execution Policy**: <subagent-allowed | controller-only>
+**Review Runner Policy**: cross-agent-allowed
+**Stage Results**:
+- \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
+
+**Review Results**:
+- \`single/modeling\`: executed:.agent-loop/modeling-review-single/r1/agent-judgment.md
+
+**Context Summary**:
+- blocked" || ((fails++))
+
+  run_case "invalid review runner policy rejected" 3 "# Workflow Checkpoint
+
+**Run Mode**: standard
+**Worker Execution Policy**: subagent-allowed
+**Review Runner Policy**: <cross-agent-allowed | manual-only>
 **Stage Results**:
 - \`single/modeling\`: .spec-driven-dev/single/single/modeling/stage-result.md
 
@@ -274,7 +358,8 @@ extract_keys() {
 stage_keys=$(extract_section "**Stage Results**:" | extract_keys || true)
 review_lines=$(extract_section "**Review Results**:" | grep -E '^- `[^`]+`:' || true)
 run_mode=$(grep -E '^\*\*Run Mode\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Run Mode\*\*:[[:space:]]*//' || true)
-review_skip_policy=$(grep -E '^\*\*Review Skip Policy\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Review Skip Policy\*\*:[[:space:]]*//' || true)
+worker_execution_policy=$(grep -E '^\*\*Worker Execution Policy\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Worker Execution Policy\*\*:[[:space:]]*//' || true)
+review_runner_policy=$(grep -E '^\*\*Review Runner Policy\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Review Runner Policy\*\*:[[:space:]]*//' || true)
 scope=$(grep -E '^\*\*Scope\*\*:[[:space:]]*' "$CHECKPOINT" | head -n 1 | sed -E 's/^\*\*Scope\*\*:[[:space:]]*//' || true)
 
 case "$run_mode" in
@@ -286,14 +371,33 @@ case "$run_mode" in
     ;;
 esac
 
-case "$review_skip_policy" in
-  ""|never|Never|NEVER) review_skip_policy="never" ;;
-  complexity-allowed|complexity_allowed|Complexity-Allowed|COMPLEXITY-ALLOWED) review_skip_policy="complexity-allowed" ;;
+case "$worker_execution_policy" in
+  subagent-allowed|subagent_allowed|Subagent-Allowed|SUBAGENT-ALLOWED) worker_execution_policy="subagent-allowed" ;;
+  controller-only|controller_only|Controller-Only|CONTROLLER-ONLY) worker_execution_policy="controller-only" ;;
   *)
-    echo "Invalid Review Skip Policy in checkpoint" >&2
+    echo "Invalid or missing Worker Execution Policy in checkpoint" >&2
     exit 3
     ;;
 esac
+
+case "$review_runner_policy" in
+  cross-agent-allowed|cross_agent_allowed|Cross-Agent-Allowed|CROSS-AGENT-ALLOWED) review_runner_policy="cross-agent-allowed" ;;
+  manual-only|manual_only|Manual-Only|MANUAL-ONLY) review_runner_policy="manual-only" ;;
+  *)
+    echo "Invalid or missing Review Runner Policy in checkpoint" >&2
+    exit 3
+    ;;
+esac
+
+if [[ "$run_mode" == "auto" && "$worker_execution_policy" != "subagent-allowed" ]]; then
+  echo "Auto mode requires Worker Execution Policy 'subagent-allowed'" >&2
+  exit 3
+fi
+
+if [[ "$run_mode" == "auto" && "$review_runner_policy" != "cross-agent-allowed" ]]; then
+  echo "Auto mode requires Review Runner Policy 'cross-agent-allowed'" >&2
+  exit 3
+fi
 
 case "$scope" in
   epic|Epic|EPIC) scope="epic" ;;
@@ -343,8 +447,8 @@ while IFS= read -r key; do
     echo "Auto mode cannot skip Review Results entry for key: $key" >&2
     exit 3
   fi
-  if [[ "$review_skip_policy" == "never" && "$line" =~ ^-\ \`[^\`]+\`:\ skipped: ]]; then
-    echo "Review Skip Policy 'never' cannot skip Review Results entry for key: $key" >&2
+  if [[ "$review_runner_policy" == "manual-only" && "$line" =~ ^-\ \`[^\`]+\`:\ executed: ]]; then
+    echo "Review Runner Policy 'manual-only' cannot use executed Review Results entry for key: $key" >&2
     exit 3
   fi
   if [[ "$scope" == "epic" && "$key" == */plan && "$line" =~ ^-\ \`[^\`]+\`:\ skipped: ]]; then

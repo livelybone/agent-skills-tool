@@ -2,7 +2,7 @@
 
 本文件只补充 `SKILL.md` 中「审查契约」的执行细节，不定义新的 workflow mode 或 workflow 顺序，也不决定某个 Review 是否必须执行。
 
-是否执行由流程本体决定：Auto 模式全部执行；Standard 模式只有在 `Review Skip Policy = complexity-allowed` 时，才可按 `guides/complexity.md` 合法跳过部分独立 runner；Modeling Exemption Review 与 Plan Review 始终强制。
+是否执行由流程本体决定：Auto 模式全部执行；Standard 模式可按 `guides/complexity.md` 合法跳过部分独立 runner；Modeling Exemption Review 与 Plan Review 始终强制。`Review Runner Policy = manual-only` 时不得启动跨 agent runner，遇到强制 Review 必须阻塞或升级。
 
 ## 统一执行协议
 

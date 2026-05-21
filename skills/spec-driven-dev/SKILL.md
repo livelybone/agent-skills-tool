@@ -35,10 +35,10 @@ metadata:
 ## How
 
 1. 识别运行模式：Standard、Auto 或 Epic。
-2. 在 Intake 阶段确认本次 workflow 的 `Review Skip Policy`，并写入 checkpoint。
+2. 在 Intake 阶段确认本次 workflow 是否允许使用 subagent 执行内容阶段 worker、是否允许使用跨 agent runner 执行 Review，并写入 checkpoint。
 3. Controller 按需澄清；复杂澄清在用户输入齐后可委派 `requirements-clarification`。
 4. 调用 `modeling-first`，或走已批准的 modeling exemption。
-5. 为内容阶段写 `StageHandoff`，通过宿主 subagent / Task 启动对应 Stage Worker。
+5. 为内容阶段写 `StageHandoff`；若 `Worker Execution Policy = subagent-allowed`，通过宿主 subagent / Task 启动对应 Stage Worker，否则只在 workflow 明确允许 inline 时由 Controller 执行。
 6. 收集 `StageResult`，更新 `WorkflowCheckpoint` 和 `DecisionLog`。
 7. 对完成的内容阶段执行或记录 Review Decision。
 8. gate 通过后进入下一阶段；最终运行机械校验并输出 summary。
@@ -73,12 +73,12 @@ metadata:
 
 ### 入口路由
 
-Controller 在 Intake 阶段必须确立本次 workflow 的 Review stage 是否可以跳过，并把选择写入 `WorkflowCheckpoint.Review Skip Policy`：
+Controller 在 Intake 阶段必须确立两项执行权限，并写入 `WorkflowCheckpoint`：
 
-- `never`：默认值。所有 Review Results 必须是 `executed:<review-result-path>`；若无法执行 Review，workflow 停在 `blocked:<reason>` 或升级给用户，不得记录 `skipped`。
-- `complexity-allowed`：仅 Standard 模式允许。可按 `guides/complexity.md` 记录合法的 `skipped:<complexity + reason>`。
+- `Worker Execution Policy`：`subagent-allowed` 或 `controller-only`。前者允许 Controller 通过宿主 subagent / Task 启动内容阶段 worker；后者禁止启动内容阶段 subagent，Controller 只能在对应 workflow 明确允许 inline 的场景内执行，否则必须停为 `blocked:<reason>` 或升级给用户。
+- `Review Runner Policy`：`cross-agent-allowed` 或 `manual-only`。前者允许 Review stage 通过 `multi-agent-loop` 启动跨 agent runner；后者禁止跨 agent Review runner，只有 Standard 模式中符合 `guides/complexity.md` 的人工审查跳过才可记录 `skipped:<complexity + reason>`。
 
-Standard 模式下，Controller 必须询问用户是否允许按复杂度跳过 Review；若用户没有明确回答，默认使用 `never`。Auto 模式不等待该人工选择，直接写入 `never`；即使 checkpoint 写了其它值也不得跳过 Review。
+Standard 模式下，Controller 必须询问用户这两项权限；用户未明确回答时分别按 `controller-only` 和 `manual-only` 处理。Auto 模式不等待普通人工 gate，但必须已有明确授权才能写入 `subagent-allowed` / `cross-agent-allowed` 并自动推进；缺少任一授权时停为 blocker，不得把无授权改写成 `skipped` 或 inline 降级。
 
 | 条件 | 路由 |
 |------|------|
@@ -132,9 +132,9 @@ Review artifact 仍由 `multi-agent-loop` 写入 `.agent-loop/<task-name>/r<N>/a
 ### 审查契约
 
 - `executed:<review-result-path>`：按 `guides/review.md` 启动 `multi-agent-loop`，加载对应 review prompt，并完成 controller judgment。
-- `skipped:<complexity + reason>`：仅 Standard 模式且 `Review Skip Policy = complexity-allowed` 时允许，并且必须符合 `guides/complexity.md`。
+- `skipped:<complexity + reason>`：仅 Standard 模式允许，并且必须符合 `guides/complexity.md`。`Review Runner Policy = manual-only` 不是独立跳过理由；跳过理由仍必须说明复杂度判定与人工审查结论。
 
-`Review Skip Policy = never` 或 Auto 模式下，Review Decision 只能是 `executed`。Clarification 阶段不设独立 Review。
+Auto 模式下 Review Decision 只能是 `executed`，且要求 `Review Runner Policy = cross-agent-allowed`。Clarification 阶段不设独立 Review。
 
 非法状态：`StageResult.Status = done` 后，`Next Action` 不得直接指向下一 content worker；必须先完成 Review Decision 并更新 `WorkflowCheckpoint.Review Results`。
 

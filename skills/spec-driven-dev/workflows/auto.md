@@ -5,7 +5,7 @@ Auto 模式是 `spec-driven-dev` 的自动编排模式。通用阶段顺序、st
 ## 核心语义
 
 - `--auto` 表示自动推进模式，不等待普通人工 gate。
-- Auto 模式固定采用 `Review Skip Policy = never`；即使 checkpoint 写了其它值，也不得跳过 Review。
+- Auto 模式要求 `Worker Execution Policy = subagent-allowed` 且 `Review Runner Policy = cross-agent-allowed`；缺少任一明确授权时停为 blocker，不得自动降级。
 - 非 Epic 场景跳过 `plan` / `plan-review`，其余阶段按 Stage Registry 执行。
 - Epic 场景按 `workflows/epic.md` 在模块维度重复步骤 7-12。
 - 每个内容阶段后面紧跟强制 Review 阶段；Auto 模式下 Review Decision 只能是 `executed`。
@@ -47,7 +47,7 @@ Auto 模式是 `spec-driven-dev` 的自动编排模式。通用阶段顺序、st
 ## 禁止行为
 
 - 不得因为 `--auto` 跳过 Review 阶段。
-- 不得把 Review runner 不可用、缺少授权或执行失败改写为 `skipped`；必须停为 blocker 或升级给用户。
+- 不得把 worker subagent 或 Review runner 不可用、缺少授权、执行失败改写为 inline 降级或 `skipped`；必须停为 blocker 或升级给用户。
 - 不得因为 `--auto` 让 Controller 吞掉内容阶段；内容阶段仍需 handoff + artifact + stage result。
 - 不得跳过 `agent-judgment.md` 裁决文件。
 - 不得把 worker 模板直接复制回 Controller 中维护。

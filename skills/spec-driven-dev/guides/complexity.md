@@ -1,10 +1,10 @@
 # 复杂度分级标准
 
-本 guide 只补充 `SKILL.md` 中 Standard 模式且 `Review Skip Policy = complexity-allowed` 时的 Review Decision：判断是否启动独立 Review runner、以及跳过时如何留痕。它不定义阶段顺序，也不允许跳过 `SKILL.md` 的不可跳过机械校验。
+本 guide 只补充 `SKILL.md` 中 Standard 模式的 Review Decision：判断是否启动独立 Review runner、以及跳过时如何留痕。它不定义阶段顺序，也不允许跳过 `SKILL.md` 的不可跳过机械校验。
 
-复杂度不会改变 `spec-driven-dev` 的 13 步主阶段顺序；它只在用户于 Intake 阶段选择允许跳过时，决定**标准模式下各 Review 阶段是否启动独立 runner**，以及人工 gate 粒度。Review Decision Gate 本身不可跳过，必须记录为 `executed` 或 `skipped + reason`。
+复杂度不会改变 `spec-driven-dev` 的 13 步主阶段顺序；它只决定**标准模式下各 Review 阶段是否启动独立 runner**，以及人工 gate 粒度。Review Decision Gate 本身不可跳过，必须记录为 `executed` 或 `skipped + reason`。
 
-`Review Skip Policy = never` 或 Auto 模式下，所有 Review 阶段强制执行，不受复杂度影响（详见 `workflows/auto.md`）。
+Auto 模式下所有 Review 阶段默认强制执行，不受复杂度影响（详见 `workflows/auto.md`）。
 
 ## 不随复杂度变化的内容
 
@@ -29,8 +29,8 @@
 
 **跳过的条件与留痕**：
 
-- 只有 `Run Mode = standard` 且 `Review Skip Policy = complexity-allowed` 时，以下跳过规则才生效
 - "可跳过" 意味着允许跳过 `multi-agent-loop` 独立审查，但人工确认仍然必须完成
+- `Review Runner Policy = manual-only` 只表示不得启动跨 agent runner，不自动构成合法跳过；跳过仍必须满足本表复杂度规则并完成人工确认
 - 所有跳过必须在 Decision Log 中写明：`跳过理由：<complexity 判定> + <具体理由>`；在 `WorkflowCheckpoint.Review Results` 中写成 `<checkpoint-key>: skipped:<complexity 判定 + 具体理由>`
 - 跳过 ≠ 忽略：跳过仅指不启动独立 runner；各阶段的机械校验（如 Red Run、check-upstream-coverage.sh）仍要执行
 - 若 `Review Results` 缺失，orchestrator 必须停在 Review Decision Gate，不得推进下一内容阶段
